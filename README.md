@@ -66,15 +66,19 @@ app/
   (partner)/                  layout con sidebar, protegido por proxy.ts
     dashboard/                resumen (5 métricas)
     organizations/            tabla de emprendedores del portafolio
+    subscriptions/            plan/vencimiento de cada org — patrocinar meses
     activity/                 actividad reciente (derivada de sales/transactions)
-    reports/                  reporte de adopción
+    reports/                  reporte de adopción + tendencias (6 meses)
   api/partner/
     me/                       identidad del coordinador autenticado (o 403 + reason si está pendiente)
     register/                 POST público — crea Firebase user + users + partners (is_active=FALSE)
     dashboard/                resumen agregado
     organizations/            lista + detalle ([id])
+    subscriptions/            lista de suscripciones por org (plan, estado, vencimiento)
+    plans/                    catálogo de planes activos (para el selector de patrocinio)
     activity/                 actividad reciente
     reports/adoption/         % de adopción
+    reports/trends/           series mensuales (adopción + ingresos, 6 meses)
     sponsor/                  POST — partner patrocina N meses de plan a una org
 lib/
   auth.ts                     verifyPartner() — análogo a verifyAdmin() del app principal
@@ -123,6 +127,5 @@ VALUES (<partner_id>, <org_id>);
 - UI de aprobación de partners nuevos (hoy es un `UPDATE` manual en Neon — ver arriba).
 - Flujo para vincular una org a un partner (hoy no hay UI — se inserta manualmente en
   `partner_organizations`).
-- UI para que el partner patrocinee meses (`POST /api/partner/sponsor` ya existe, falta el form).
 - Email de confirmación/aprobación al registrarse (hoy no se envía nada).
 - Filtros por período, exportar a Excel, alertas de inactividad.

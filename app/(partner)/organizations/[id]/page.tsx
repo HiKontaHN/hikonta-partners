@@ -1,10 +1,13 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { usePartnerSWR } from "@/hooks/use-partner-swr";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { SponsorModal } from "@/components/partner/sponsor-modal";
 import { StatCard } from "@/components/partner/stat-card";
 import { WeeklyTransactionsChart, type WeeklyTransactions } from "@/components/partner/weekly-transactions-chart";
 import { IncomeTrendChart, type IncomeMonth } from "@/components/partner/income-trend-chart";
@@ -34,6 +37,7 @@ type OrgDetail = {
   ownerEmail: string | null;
   subscriptionStatus: string | null;
   currentPeriodEnd: string | null;
+  planId: number | null;
   planName: string | null;
   lastActivityAt: string;
   status: "ACTIVE" | "INACTIVE" | "DORMANT";
@@ -71,7 +75,8 @@ const STATUS_VARIANT: Record<OrgDetail["status"], "success" | "warning" | "muted
 
 export default function OrganizationDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const { data, isLoading, error } = usePartnerSWR<OrgDetailResponse>(`/api/partner/organizations/${id}`);
+  const { data, isLoading, error, mutate } = usePartnerSWR<OrgDetailResponse>(`/api/partner/organizations/${id}`);
+  const [sponsorOpen, setSponsorOpen] = useState(false);
 
   if (isLoading) return <p className="text-sm text-muted-foreground">Cargando…</p>;
 
@@ -118,6 +123,10 @@ export default function OrganizationDetailPage() {
             </Badge>
           )}
           <Badge variant={STATUS_VARIANT[org.status]}>{STATUS_LABEL[org.status]}</Badge>
+          <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => setSponsorOpen(true)}>
+            <Lineicons icon={Wallet1Outlined} size={13} />
+            Patrocinar meses
+          </Button>
         </div>
       </div>
 
@@ -225,6 +234,15 @@ export default function OrganizationDetailPage() {
           )}
         </Card>
       </div>
+
+      <SponsorModal
+        open={sponsorOpen}
+        onClose={() => setSponsorOpen(false)}
+        onSuccess={() => mutate()}
+        orgId={org.id}
+        orgName={org.name}
+        currentPlanId={org.planId}
+      />
     </div>
   );
 }

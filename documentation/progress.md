@@ -66,8 +66,11 @@ app/api/partner/
   dashboard/                GET  — 5 KPIs del resumen
   organizations/            GET  — tabla de emprendedores del portafolio
   organizations/[id]/       GET  — detalle de una org
+  subscriptions/            GET  — plan/estado/vencimiento de cada org del portafolio
+  plans/                    GET  — catálogo de planes activos
   activity/                 GET  — actividad reciente (derivada de sales/transactions)
   reports/adoption/         GET  — % de adopción
+  reports/trends/           GET  — series mensuales (adopción + ingresos, 6 meses)
   sponsor/                  POST — partner patrocina N meses de plan a una org
 ```
 
@@ -97,8 +100,9 @@ app/
   (partner)/              layout protegido — sidebar isla flotante colapsable + navbar isla flotante
     dashboard/             5 KPIs
     organizations/         tabla de emprendedores (propietario, ingresos, tendencia, status)
+    subscriptions/         plan/vencimiento de cada org — patrocinar meses
     activity/               feed de actividad
-    reports/                 reporte de adopción
+    reports/                 reporte de adopción + tendencias
 ```
 
 - **Sidebar**: isla flotante (`rounded-2xl` + sombra, sin borde duro), colapsable a riel de íconos,
@@ -149,7 +153,7 @@ entre al dominio vería el panel sin loguearse.
 - [ ] **Apagar el bypass de autenticación** antes de cualquier despliegue real
 - [ ] UI de aprobación de partners nuevos (hoy es un `UPDATE partners SET is_active = TRUE` manual en Neon)
 - [ ] UI para vincular una org a un partner (hoy es un `INSERT` manual en `partner_organizations`)
-- [ ] UI para que el partner patrocinee meses (`POST /api/partner/sponsor` ya existe, falta el formulario)
+- [x] UI para que el partner patrocinee meses — página `/subscriptions` (lista + modal `SponsorModal`, también embebido en `/organizations/[id]`), usa `POST /api/partner/sponsor` que ya existía
 - [ ] Email de confirmación/aprobación al registrarse (hoy no se envía nada)
 - [ ] Deploy real: proyecto en Vercel + dominio `partners.hikonta.com` + variables de entorno
 - [ ] `eslint.config.js` (no está configurado en este repo todavía)

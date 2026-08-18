@@ -27,7 +27,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         o.id, o.name, o.logo_url, o.created_at, o.timezone, o.currency,
         po.share_financials, po.linked_at,
         u.display_name AS owner_name, u.email AS owner_email,
-        os.status AS subscription_status, os.current_period_end,
+        os.plan_id, os.status AS subscription_status, os.current_period_end,
         sp.name   AS plan_name,
         GREATEST(
           COALESCE((SELECT MAX(sold_at)     FROM sales        WHERE org_id = o.id), o.created_at),
@@ -118,6 +118,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         ownerEmail: org.owner_email,
         subscriptionStatus: org.subscription_status,
         currentPeriodEnd: org.current_period_end,
+        planId: org.plan_id,
         planName: org.plan_name,
         lastActivityAt: org.last_activity_at,
         status,

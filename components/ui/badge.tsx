@@ -5,6 +5,9 @@ const variants = {
   success: "bg-chip-green-bg text-chip-green",
   warning: "bg-chip-amber-bg text-chip-amber",
   muted: "bg-muted text-muted-foreground",
+  // Para estados que ya requieren intervención (suscripción vencida/cancelada),
+  // no solo "atención" — mismo tono que ya usa la tendencia negativa de ingresos.
+  danger: "bg-destructive/10 text-destructive",
 } as const;
 
 export function Badge({
