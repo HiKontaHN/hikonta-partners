@@ -1,0 +1,167 @@
+@import 'tailwindcss';
+
+@custom-variant dark (&:is(.dark *));
+
+/* ── Paleta inspirada en One UI (Samsung) ────────────────────────────
+   Radios grandes, superficies casi sin borde (se distinguen por sombra
+   suave, no por línea), azul saturado de marca, y chips de acento por
+   categoría para los íconos de las tarjetas de estadísticas. */
+
+:root {
+  --background: #F1F3F6;
+  --foreground: #17181C;
+  --card: #FFFFFF;
+  --card-foreground: #17181C;
+  --popover: #FFFFFF;
+  --popover-foreground: #17181C;
+  --primary: #1455F6;
+  --primary-foreground: #FFFFFF;
+  --secondary: #EDEFF3;
+  --secondary-foreground: #17181C;
+  --muted: #EDEFF3;
+  --muted-foreground: #6C7280;
+  --accent: #E9F0FF;
+  --accent-foreground: #1455F6;
+  --destructive: #E03B3B;
+  --destructive-foreground: #FFFFFF;
+  --border: #E7E9EE;
+  --input: #E7E9EE;
+  --ring: #1455F6;
+  --radius: 1.25rem;
+  --success: #1FB35D;
+  --success-foreground: #FFFFFF;
+  --warning: #F5A623;
+  --warning-foreground: #17181C;
+  --sidebar: #FFFFFF;
+  --sidebar-foreground: #43464F;
+  --sidebar-primary: #1455F6;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #E9F0FF;
+  --sidebar-accent-foreground: #1455F6;
+  --sidebar-border: #E7E9EE;
+
+  /* Chips de acento — icono sólido + fondo tintado, estilo SmartThings */
+  --chip-blue: #1455F6;
+  --chip-blue-bg: #E9F0FF;
+  --chip-green: #1FB35D;
+  --chip-green-bg: #E4F8EC;
+  --chip-amber: #F5A623;
+  --chip-amber-bg: #FDF1DC;
+  --chip-purple: #7C5CFC;
+  --chip-purple-bg: #F0ECFF;
+
+  --shadow-card: 0 1px 2px rgba(23, 24, 28, 0.04), 0 10px 28px -12px rgba(23, 24, 28, 0.14);
+  --shadow-card-hover: 0 2px 4px rgba(23, 24, 28, 0.05), 0 16px 36px -12px rgba(23, 24, 28, 0.18);
+}
+
+.dark {
+  --background: #000000;
+  --foreground: #F5F6F8;
+  --card: #17181C;
+  --card-foreground: #F5F6F8;
+  --popover: #1D1E23;
+  --popover-foreground: #F5F6F8;
+  --primary: #4C7EFF;
+  --primary-foreground: #05060A;
+  --secondary: #201F26;
+  --secondary-foreground: #F5F6F8;
+  --muted: #201F26;
+  --muted-foreground: #96979F;
+  --accent: #182449;
+  --accent-foreground: #8FB1FF;
+  --destructive: #FF5C5C;
+  --destructive-foreground: #05060A;
+  --border: #232329;
+  --input: #232329;
+  --ring: #4C7EFF;
+  --success: #34D07A;
+  --success-foreground: #05060A;
+  --warning: #FFC24B;
+  --warning-foreground: #05060A;
+  --sidebar: #0A0A0D;
+  --sidebar-foreground: #C7C8D0;
+  --sidebar-primary: #4C7EFF;
+  --sidebar-primary-foreground: #05060A;
+  --sidebar-accent: #182449;
+  --sidebar-accent-foreground: #8FB1FF;
+  --sidebar-border: #1C1C22;
+
+  --chip-blue: #4C7EFF;
+  --chip-blue-bg: #182449;
+  --chip-green: #34D07A;
+  --chip-green-bg: #103822;
+  --chip-amber: #FFC24B;
+  --chip-amber-bg: #3A2C0F;
+  --chip-purple: #A78BFF;
+  --chip-purple-bg: #241A47;
+
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 28px -12px rgba(0, 0, 0, 0.6);
+  --shadow-card-hover: 0 2px 4px rgba(0, 0, 0, 0.45), 0 16px 36px -12px rgba(0, 0, 0, 0.7);
+}
+
+@theme inline {
+  --font-sans: var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 0.75rem);
+  --radius-md: calc(var(--radius) - 0.5rem);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 0.5rem);
+  --radius-2xl: calc(var(--radius) + 1rem);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-chip-blue: var(--chip-blue);
+  --color-chip-blue-bg: var(--chip-blue-bg);
+  --color-chip-green: var(--chip-green);
+  --color-chip-green-bg: var(--chip-green-bg);
+  --color-chip-amber: var(--chip-amber);
+  --color-chip-amber-bg: var(--chip-amber-bg);
+  --color-chip-purple: var(--chip-purple);
+  --color-chip-purple-bg: var(--chip-purple-bg);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    letter-spacing: -0.01em;
+  }
+}
+
+@layer utilities {
+  .card-elevated {
+    box-shadow: var(--shadow-card);
+    transition: box-shadow 180ms ease, transform 180ms ease;
+  }
+  .card-elevated:hover {
+    box-shadow: var(--shadow-card-hover);
+  }
+}
