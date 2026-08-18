@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { usePartnerSWR } from "@/hooks/use-partner-swr";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency, formatDateShort } from "@/lib/utils";
@@ -36,6 +37,7 @@ const STATUS_VARIANT: Record<OrgRow["status"], "success" | "warning" | "muted"> 
 };
 
 export default function OrganizationsPage() {
+  const router = useRouter();
   const { data, isLoading } = usePartnerSWR<OrgsResponse>("/api/partner/organizations");
 
   return (
@@ -67,7 +69,11 @@ export default function OrganizationsPage() {
             </thead>
             <tbody>
               {data.data.map((org) => (
-                <tr key={org.id} className="border-t border-border first:border-0">
+                <tr
+                  key={org.id}
+                  onClick={() => router.push(`/organizations/${org.id}`)}
+                  className="cursor-pointer border-t border-border first:border-0 hover:bg-muted/50"
+                >
                   <td className="px-3 py-3 font-bold sm:px-5">{org.name}</td>
                   <td className="px-3 py-3 text-muted-foreground sm:px-5">
                     {org.ownerName ?? org.ownerEmail ?? "—"}

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { HiKontaIcon } from "@/components/shared/hikonta-icon";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { Lineicons } from "@lineiconshq/react-lineicons";
 import type { LineiconsProps } from "@lineiconshq/react-lineicons";
 
@@ -73,12 +74,15 @@ export default function LandingPage() {
           <HiKontaIcon className="h-8 w-8 sm:h-9 sm:w-9" />
           <span className="text-sm font-bold tracking-tight">HiKonta Partners</span>
         </div>
-        <Link
-          href="/login"
-          className="flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-sm font-bold text-primary-foreground sm:px-5 sm:py-2.5"
-        >
-          Iniciar sesión
-        </Link>
+        <div className="flex items-center gap-2 sm:gap-3">
+          <ThemeToggle collapsed />
+          <Link
+            href="/login"
+            className="flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-sm font-bold text-primary-foreground sm:px-5 sm:py-2.5"
+          >
+            Iniciar sesión
+          </Link>
+        </div>
       </header>
 
       {/* ── Hero ────────────────────────────────────────────────────── */}

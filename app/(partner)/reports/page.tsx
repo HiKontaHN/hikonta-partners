@@ -2,6 +2,8 @@
 
 import { usePartnerSWR } from "@/hooks/use-partner-swr";
 import { StatCard } from "@/components/partner/stat-card";
+import { AdoptionTrendChart, type AdoptionMonth } from "@/components/partner/adoption-trend-chart";
+import { IncomeTrendChart } from "@/components/partner/income-trend-chart";
 import { BarChart4Outlined, UserMultiple4Outlined, User4Outlined } from "@lineiconshq/free-icons";
 
 type AdoptionResponse = {
@@ -15,6 +17,10 @@ type AdoptionResponse = {
   };
 };
 
+type TrendsResponse = {
+  data: { months: (AdoptionMonth & { income: number })[] };
+};
+
 const RECOMMENDATION_LABEL: Record<AdoptionResponse["data"]["recommendation"], string> = {
   GOOD: "Excelente",
   MODERATE: "Moderado",
@@ -23,6 +29,7 @@ const RECOMMENDATION_LABEL: Record<AdoptionResponse["data"]["recommendation"], s
 
 export default function ReportsPage() {
   const { data, isLoading } = usePartnerSWR<AdoptionResponse>("/api/partner/reports/adoption");
+  const { data: trends, isLoading: trendsLoading } = usePartnerSWR<TrendsResponse>("/api/partner/reports/trends");
 
   if (isLoading || !data) return <p className="text-sm text-muted-foreground">Cargando…</p>;
 
@@ -44,6 +51,13 @@ export default function ReportsPage() {
           tone={r.recommendation === "GOOD" ? "green" : r.recommendation === "MODERATE" ? "amber" : "blue"}
         />
       </div>
+
+      {!trendsLoading && trends && (
+        <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <AdoptionTrendChart months={trends.data.months} />
+          <IncomeTrendChart months={trends.data.months} />
+        </div>
+      )}
     </div>
   );
 }
