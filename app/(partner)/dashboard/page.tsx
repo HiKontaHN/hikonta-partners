@@ -12,7 +12,10 @@ import {
   BarChart4Outlined,
   DollarCircleOutlined,
   Bell1Outlined,
+  Buildings1Outlined,
 } from "@lineiconshq/free-icons";
+
+type SectorSlice = { industryId: number | null; industryName: string; count: number; pct: number };
 
 type DashboardResponse = {
   data: {
@@ -29,9 +32,16 @@ type DashboardResponse = {
       incomeOrgsSharing: number;
       transactionsThisMonth: number;
     };
+    sectorBreakdown: SectorSlice[];
     lastUpdated: string;
   };
 };
+
+// Paleta fija para las barras de sector — mismo set de tonos "chip" que ya
+// usa el resto del panel, ciclada si hay más sectores que colores.
+const SECTOR_COLORS = [
+  "bg-chip-blue", "bg-chip-green", "bg-chip-amber", "bg-chip-purple", "bg-destructive",
+];
 
 // Umbrales del KPI de adopción — ver documentation/dashboard.md
 function adoptionStatus(rate: number) {
@@ -45,7 +55,7 @@ export default function DashboardPage() {
 
   if (isLoading || !data) return <p className="text-sm text-muted-foreground">Cargando…</p>;
 
-  const { summary, partner, lastUpdated } = data.data;
+  const { summary, sectorBreakdown, partner, lastUpdated } = data.data;
   const adoption = adoptionStatus(summary.adoptionRate);
   const trend = summary.incomeTrendPct;
   const total = summary.totalOrganizations || 1; // evita división por 0 en la barra
@@ -143,6 +153,37 @@ export default function DashboardPage() {
               {summary.dormantOrganizations} dormant
             </span>
           </div>
+        </Card>
+
+        {/* KPI 6 — Distribución por sector/industria (sección 14 de
+            ideas-feasibility.md). Sin gate de share_financials: es solo un
+            conteo de organizaciones por industria, no revela montos. */}
+        <Card className="p-5 sm:col-span-2 lg:col-span-2">
+          <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-full bg-chip-purple-bg">
+            <Lineicons icon={Buildings1Outlined} size={20} color="var(--chip-purple)" />
+          </div>
+          <p className="text-sm font-medium text-muted-foreground">Distribución por sector</p>
+
+          {sectorBreakdown.length === 0 ? (
+            <p className="mt-3 text-sm text-muted-foreground">Todavía no hay organizaciones en tu portafolio.</p>
+          ) : (
+            <div className="mt-3 flex flex-col gap-2.5">
+              {sectorBreakdown.map((s, i) => (
+                <div key={s.industryId ?? "sin-sector"} className="flex items-center gap-3 text-xs">
+                  <span className="w-28 shrink-0 truncate font-semibold sm:w-40">{s.industryName}</span>
+                  <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
+                    <div
+                      className={SECTOR_COLORS[i % SECTOR_COLORS.length]}
+                      style={{ width: `${s.pct}%`, height: "100%" }}
+                    />
+                  </div>
+                  <span className="w-16 shrink-0 text-right text-muted-foreground">
+                    {s.count} · {s.pct}%
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </Card>
       </div>
     </div>

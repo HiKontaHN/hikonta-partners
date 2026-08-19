@@ -27,6 +27,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         o.id, o.name, o.logo_url, o.created_at, o.timezone, o.currency,
         po.share_financials, po.linked_at,
         u.display_name AS owner_name, u.email AS owner_email,
+        i.name AS industry_name,
         os.plan_id, os.status AS subscription_status, os.current_period_end,
         sp.name   AS plan_name,
         GREATEST(
@@ -36,6 +37,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       FROM organizations o
       JOIN partner_organizations po ON po.org_id = o.id AND po.partner_id = ${auth.data.partnerId}
       LEFT JOIN users u ON u.id = o.owner_user_id
+      LEFT JOIN industries i ON i.id = o.industry_id
       LEFT JOIN org_subscriptions os ON os.org_id = o.id
       LEFT JOIN subscription_plans sp ON sp.id = os.plan_id
       WHERE o.id = ${orgId}
@@ -116,6 +118,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         linkedAt: org.linked_at,
         ownerName: org.owner_name,
         ownerEmail: org.owner_email,
+        industryName: org.industry_name,
         subscriptionStatus: org.subscription_status,
         currentPeriodEnd: org.current_period_end,
         planId: org.plan_id,

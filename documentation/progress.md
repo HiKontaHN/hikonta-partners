@@ -1,6 +1,6 @@
 # Estado del proyecto — HiKonta Partners
 
-> Última actualización: 18 de agosto de 2026
+> Última actualización: 19 de agosto de 2026
 
 ---
 
@@ -63,15 +63,16 @@ sobre el registro de HiKonta):
 app/api/partner/
   me/                       GET  — identidad del coordinador (o 403 + reason si está pendiente)
   register/                 POST — público, crea Firebase user + users + partners (is_active=FALSE)
-  dashboard/                GET  — 5 KPIs del resumen
-  organizations/            GET  — tabla de emprendedores del portafolio
-  organizations/[id]/       GET  — detalle de una org
+  dashboard/                GET  — KPIs del resumen + distribución por sector/industria
+  organizations/            GET  — tabla de emprendedores del portafolio (incluye sector)
+  organizations/[id]/       GET  — detalle de una org (incluye sector)
   subscriptions/            GET  — plan/estado/vencimiento de cada org del portafolio
+  subscriptions/payments/   GET  — historial de patrocinios que pagó ESTE partner (búsqueda + filtro + paginación)
   plans/                    GET  — catálogo de planes activos
   activity/                 GET  — actividad reciente (derivada de sales/transactions)
-  reports/adoption/         GET  — % de adopción
+  reports/adoption/         GET  — % de adopción + reporte para terceros (beneficiarios, ventas generadas, sectores)
   reports/trends/           GET  — series mensuales (adopción + ingresos, 6 meses)
-  sponsor/                  POST — partner patrocina N meses de plan a una org
+  sponsor/                  POST — partner patrocina N meses de plan a una org (rate-limited)
 ```
 
 `lib/auth.ts` → `verifyPartner()` (análogo a `verifyAdmin()` del app principal).
@@ -100,7 +101,7 @@ app/
   (partner)/              layout protegido — sidebar isla flotante colapsable + navbar isla flotante
     dashboard/             5 KPIs
     organizations/         tabla de emprendedores (propietario, ingresos, tendencia, status)
-    subscriptions/         plan/vencimiento de cada org — patrocinar meses
+    subscriptions/         plan/vencimiento de cada org — patrocinar meses + historial de patrocinios
     activity/               feed de actividad
     reports/                 reporte de adopción + tendencias
 ```
@@ -154,10 +155,15 @@ entre al dominio vería el panel sin loguearse.
 - [ ] UI de aprobación de partners nuevos (hoy es un `UPDATE partners SET is_active = TRUE` manual en Neon)
 - [ ] UI para vincular una org a un partner (hoy es un `INSERT` manual en `partner_organizations`)
 - [x] UI para que el partner patrocinee meses — página `/subscriptions` (lista + modal `SponsorModal`, también embebido en `/organizations/[id]`), usa `POST /api/partner/sponsor` que ya existía
+- [x] Historial de patrocinios detallado — `/api/partner/subscriptions/payments` + sección en `/subscriptions`
+- [x] Distribución por sector/industria — dashboard + reporte para terceros
+- [x] Rate limiting (global + por endpoint sensible) — portado de `hikonta-admin`
+- [x] Fix de la condición de carrera del cookie de sesión en login/register — portado de `hikonta-admin`
 - [ ] Email de confirmación/aprobación al registrarse (hoy no se envía nada)
 - [ ] Deploy real: proyecto en Vercel + dominio `partners.hikonta.com` + variables de entorno
 - [ ] `eslint.config.js` (no está configurado en este repo todavía)
-- [ ] Filtros por período, exportar a Excel, alertas automáticas de inactividad
+- [ ] Exportar a Excel/PDF el reporte para terceros, alertas automáticas de inactividad (requiere cron — ver sección 10)
+- [ ] Cohortes/programas, mentores, empleo real, financiamiento — bloqueados por falta de tablas nuevas, ver `documentation/ideas-feasibility.md`
 - [ ] Fase 2/3 de KPIs: gráficos de tendencia histórica, retención a 90 días, benchmarking entre partners
 
 ---

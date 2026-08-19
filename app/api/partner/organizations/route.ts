@@ -25,6 +25,7 @@ export async function GET(request: NextRequest) {
         po.share_financials,
         u.display_name AS owner_name,
         u.email        AS owner_email,
+        i.name          AS industry_name,
         os.status       AS subscription_status,
         sp.name         AS plan_name,
         (SELECT COUNT(*) FROM sales s WHERE s.org_id = o.id
@@ -40,6 +41,7 @@ export async function GET(request: NextRequest) {
       FROM organizations o
       JOIN partner_organizations po ON po.org_id = o.id AND po.partner_id = ${auth.data.partnerId}
       LEFT JOIN users u ON u.id = o.owner_user_id
+      LEFT JOIN industries i ON i.id = o.industry_id
       LEFT JOIN org_subscriptions os ON os.org_id = o.id
       LEFT JOIN subscription_plans sp ON sp.id = os.plan_id
       ORDER BY o.name ASC
@@ -70,6 +72,7 @@ export async function GET(request: NextRequest) {
         logoUrl: o.logo_url,
         ownerName: o.owner_name,
         ownerEmail: o.owner_email,
+        industryName: o.industry_name,
         joinedAt: o.created_at,
         daysActive,
         subscriptionStatus: o.subscription_status,

@@ -35,6 +35,7 @@ type OrgDetail = {
   linkedAt: string;
   ownerName: string | null;
   ownerEmail: string | null;
+  industryName: string | null;
   subscriptionStatus: string | null;
   currentPeriodEnd: string | null;
   planId: number | null;
@@ -116,6 +117,7 @@ export default function OrganizationDetailPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {org.industryName && <Badge variant="muted">{org.industryName}</Badge>}
           {org.planName && (
             <Badge variant="muted">
               <Lineicons icon={Crown3Outlined} size={12} />

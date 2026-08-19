@@ -10,6 +10,7 @@ type OrgRow = {
   name: string;
   ownerName: string | null;
   ownerEmail: string | null;
+  industryName: string | null;
   planName: string | null;
   subscriptionStatus: string | null;
   salesThisMonth: number;
@@ -59,6 +60,7 @@ export default function OrganizationsPage() {
               <tr>
                 <th className="px-3 py-3 font-semibold sm:px-5">Negocio</th>
                 <th className="px-3 py-3 font-semibold sm:px-5">Propietario</th>
+                <th className="px-3 py-3 font-semibold sm:px-5">Sector</th>
                 <th className="px-3 py-3 font-semibold sm:px-5">Última actividad</th>
                 <th className="px-3 py-3 font-semibold sm:px-5">Transacciones</th>
                 <th className="px-3 py-3 font-semibold sm:px-5">Ingresos</th>
@@ -77,6 +79,13 @@ export default function OrganizationsPage() {
                   <td className="px-3 py-3 font-bold sm:px-5">{org.name}</td>
                   <td className="px-3 py-3 text-muted-foreground sm:px-5">
                     {org.ownerName ?? org.ownerEmail ?? "—"}
+                  </td>
+                  <td className="px-3 py-3 sm:px-5">
+                    {org.industryName ? (
+                      <Badge variant="muted">{org.industryName}</Badge>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
                   </td>
                   <td className="px-3 py-3 text-muted-foreground sm:px-5">
                     {formatDateShort(org.lastActivityAt)}

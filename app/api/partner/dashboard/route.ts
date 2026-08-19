@@ -71,6 +71,18 @@ export async function GET(request: NextRequest) {
         AND DATE_TRUNC('month', s.sold_at) = DATE_TRUNC('month', NOW())
     `;
 
+    // Distribución por sector/industria — sección 14 de ideas-feasibility.md.
+    // GROUP BY sobre industry_id, ya migrado (v4.10) — sin org.industry_id
+    // seteado cae en "Sin sector" (i.id IS NULL), no se descarta la fila.
+    const sectorRows = await sql`
+      SELECT i.id AS industry_id, i.name AS industry_name, COUNT(*)::int AS count
+      FROM organizations o
+      JOIN partner_organizations po ON po.org_id = o.id AND po.partner_id = ${auth.data.partnerId}
+      LEFT JOIN industries i ON i.id = o.industry_id
+      GROUP BY i.id, i.name
+      ORDER BY count DESC, industry_name ASC NULLS LAST
+    `;
+
     return Response.json({
       data: {
         partner: auth.data.partnerName,
@@ -86,6 +98,12 @@ export async function GET(request: NextRequest) {
           incomeOrgsSharing: income.orgs_sharing,
           transactionsThisMonth: txCount.count,
         },
+        sectorBreakdown: (sectorRows as any[]).map((s) => ({
+          industryId: s.industry_id,
+          industryName: s.industry_name ?? "Sin sector",
+          count: s.count,
+          pct: total > 0 ? Number(((s.count / total) * 100).toFixed(1)) : 0,
+        })),
         lastUpdated: new Date().toISOString(),
       },
     });
