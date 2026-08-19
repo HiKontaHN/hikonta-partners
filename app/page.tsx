@@ -9,7 +9,7 @@ import {
   HandShakeOutlined,
   Home2Outlined,
   Briefcase1Outlined,
-  CalendarDaysOutlined,
+  Rocket5Outlined,
   BarChart4Outlined,
   ArrowRightOutlined,
   Locked1Outlined,
@@ -30,10 +30,10 @@ const FEATURES: { icon: IconValue; title: string; description: string; tone: key
     description: "Cada negocio de tu incubadora: plan, ventas del mes y última vez que usó HiKonta.",
   },
   {
-    icon: CalendarDaysOutlined,
+    icon: Rocket5Outlined,
     tone: "green",
-    title: "Actividad reciente",
-    description: "Ventas y movimientos financieros recientes de tus emprendedores, en tiempo real.",
+    title: "Impacto medible",
+    description: "Cuánto creció cada negocio desde que se unió a vos — en %, sin necesidad de ver un solo monto.",
   },
   {
     icon: BarChart4Outlined,

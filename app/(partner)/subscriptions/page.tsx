@@ -6,6 +6,7 @@ import { usePartnerSWR } from "@/hooks/use-partner-swr";
 import { useDebounce } from "@/hooks/use-debounce";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { StatCard } from "@/components/partner/stat-card";
 import { SponsorModal } from "@/components/partner/sponsor-modal";
 import { formatDateShort } from "@/lib/utils";
 import { Lineicons } from "@lineiconshq/react-lineicons";
@@ -15,6 +16,7 @@ import {
   ArrowLeftOutlined,
   ArrowRightOutlined,
   Ticket1Outlined,
+  Crown3Outlined,
 } from "@lineiconshq/free-icons";
 
 type SubscriptionRow = {
@@ -33,7 +35,30 @@ type SubscriptionRow = {
   monthsSponsored: number;
 };
 
-type SubscriptionsResponse = { data: SubscriptionRow[]; total: number };
+type SubscriptionsSummary = {
+  activeCount: number;
+  trialCount: number;
+  pastDueCount: number;
+  cancelledCount: number;
+  expiredCount: number;
+  totalCount: number;
+};
+
+type ActivelySponsoredOrg = {
+  id: number;
+  name: string;
+  logoUrl: string | null;
+  planName: string | null;
+  currentPeriodEnd: string | null;
+  monthsSponsored: number;
+};
+
+type SubscriptionsResponse = {
+  data: SubscriptionRow[];
+  total: number;
+  summary: SubscriptionsSummary;
+  activelySponsored: ActivelySponsoredOrg[];
+};
 
 const STATUS_LABEL: Record<string, string> = {
   TRIAL: "Prueba",
@@ -60,6 +85,16 @@ export default function SubscriptionsPage() {
   // key de SWR en particular.
   const [paymentsRefreshKey, setPaymentsRefreshKey] = useState(0);
 
+  // Mismas keys que usan CreditsSection/PaymentHistorySection más abajo —
+  // SWR las deduplica (un solo fetch de red), esto solo lee el resultado
+  // compartido para armar las stat cards de arriba.
+  const { data: creditsData } = usePartnerSWR<CreditsResponse>("/api/partner/credits");
+  const { data: paymentsData } = usePartnerSWR<PaymentsResponse>(
+    "/api/partner/subscriptions/payments?search=&status=all&page=1"
+  );
+
+  const summary = data?.summary;
+
   return (
     <div>
       <div className="mb-6 flex flex-wrap items-center justify-between gap-2">
@@ -70,6 +105,30 @@ export default function SubscriptionsPage() {
             plan directamente desde acá.
           </p>
         </div>
+      </div>
+
+      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <StatCard
+          title="Suscripciones activas"
+          value={summary ? summary.activeCount : "—"}
+          subtitle={summary ? `de ${summary.totalCount} en tu portafolio` : undefined}
+          icon={Crown3Outlined}
+          tone="green"
+        />
+        <StatCard
+          title="Historial de patrocinios"
+          value={paymentsData ? `${paymentsData.lifetime.totalMonths} meses` : "—"}
+          subtitle={paymentsData ? `$${paymentsData.lifetime.totalUsd.toFixed(2)} pagados en total` : undefined}
+          icon={Wallet1Outlined}
+          tone="blue"
+        />
+        <StatCard
+          title="Créditos sin asignar"
+          value={creditsData ? creditsData.totals.pending : "—"}
+          subtitle={creditsData ? `${creditsData.totals.claimed} ya asignados` : undefined}
+          icon={Ticket1Outlined}
+          tone="amber"
+        />
       </div>
 
       {isLoading && <p className="text-sm text-muted-foreground">Cargando…</p>}
@@ -175,7 +234,63 @@ export default function SubscriptionsPage() {
 
       <CreditsSection />
 
+      <ActivelySponsoredSection orgs={data?.activelySponsored ?? []} isLoading={isLoading} />
+
       <PaymentHistorySection key={paymentsRefreshKey} />
+    </div>
+  );
+}
+
+// ── Organizaciones que estás patrocinando activamente ────────────────────
+// Distinto del historial de abajo: acá solo orgs con suscripción ACTIVE hoy
+// que vos patrocinaste alguna vez (ver activelySponsored en
+// GET /api/partner/subscriptions) — si una org canceló, sale de esta lista
+// aunque siga en el historial de pagos.
+
+function ActivelySponsoredSection({ orgs, isLoading }: { orgs: ActivelySponsoredOrg[]; isLoading: boolean }) {
+  if (!isLoading && orgs.length === 0) return null;
+
+  return (
+    <div className="mt-10">
+      <h2 className="mb-1 text-lg font-semibold">Organizaciones que estás patrocinando activamente</h2>
+      <p className="mb-4 text-sm text-muted-foreground">
+        Suscripción activa hoy, con al menos un mes pagado por vos.
+      </p>
+
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground">Cargando…</p>
+      ) : (
+        <div className="card-elevated overflow-x-auto rounded-xl bg-card">
+          <table className="w-full text-sm">
+            <thead className="text-left text-muted-foreground">
+              <tr>
+                <th className="px-3 py-3 font-semibold sm:px-5">Negocio</th>
+                <th className="px-3 py-3 font-semibold sm:px-5">Plan</th>
+                <th className="px-3 py-3 font-semibold sm:px-5">Meses patrocinados</th>
+                <th className="px-3 py-3 font-semibold sm:px-5">Vence</th>
+              </tr>
+            </thead>
+            <tbody>
+              {orgs.map((o) => (
+                <tr key={o.id} className="border-t border-border first:border-0">
+                  <td className="px-3 py-3 sm:px-5">
+                    <Link href={`/organizations/${o.id}`} className="font-bold hover:underline">
+                      {o.name}
+                    </Link>
+                  </td>
+                  <td className="px-3 py-3 text-muted-foreground sm:px-5">{o.planName ?? "—"}</td>
+                  <td className="px-3 py-3 sm:px-5">
+                    {o.monthsSponsored} mes{o.monthsSponsored === 1 ? "" : "es"}
+                  </td>
+                  <td className="px-3 py-3 text-muted-foreground sm:px-5">
+                    {o.currentPeriodEnd ? formatDateShort(o.currentPeriodEnd) : "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

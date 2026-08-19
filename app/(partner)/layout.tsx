@@ -12,7 +12,6 @@ import {
   Home2Outlined,
   Briefcase1Outlined,
   BarChart4Outlined,
-  CalendarDaysOutlined,
   Crown3Outlined,
   ExitOutlined,
   MenuHamburger1Outlined,
@@ -21,11 +20,13 @@ import {
   ChevronLeftOutlined,
 } from "@lineiconshq/free-icons";
 
+// "Actividad" (feed de eventos) se sacó del panel — quedaba redundante con
+// el detalle de organización, que ya muestra la misma información como
+// tendencia % (ver ImpactBanner en organizations/[id]/page.tsx).
 const NAV = [
   { href: "/dashboard", label: "Resumen", icon: Home2Outlined },
   { href: "/organizations", label: "Emprendedores", icon: Briefcase1Outlined },
   { href: "/subscriptions", label: "Suscripciones", icon: Crown3Outlined },
-  { href: "/activity", label: "Actividad", icon: CalendarDaysOutlined },
   { href: "/reports", label: "Reportes", icon: BarChart4Outlined },
 ];
 

@@ -64,6 +64,11 @@ arquitectura real de HiKonta con estas desviaciones deliberadas del doc original
 - **"Volumen de transacciones"** se muestra sin gate — es un conteo, no revela montos.
 - **Fase 2/3 del doc** (gráficos de tendencia históricos, retención a 90 días, benchmarking entre
   partners) — no implementado todavía, el propio doc los marca como no-MVP.
+- **Panel 3 (Actividad, feed de eventos) se sacó del producto (2026-08-19).** El doc lo pedía como
+  vista aparte; quedaba redundante con el detalle de organización, que ya muestra lo mismo como
+  tendencia % (ver `ImpactBanner` en `organizations/[id]/page.tsx`) — un feed cronológico sin
+  contexto de tendencia no aportaba nada encima. `app/api/partner/activity` y `(partner)/activity`
+  ya no existen.
 
 ## Estructura
 
@@ -75,17 +80,19 @@ app/
   (partner)/                  layout con sidebar, protegido por proxy.ts
     dashboard/                resumen (5 métricas)
     organizations/            tabla de emprendedores del portafolio
-    subscriptions/            plan/vencimiento de cada org — patrocinar meses
-    activity/                 actividad reciente (derivada de sales/transactions)
+    subscriptions/            panel de suscripciones — stat cards (activas/historial/créditos
+                              sin asignar), tabla completa, patrocinados activos, historial
     reports/                  reporte de adopción + tendencias (6 meses)
   api/partner/
     me/                       identidad del coordinador autenticado (o 403 + reason si está pendiente)
     register/                 POST público — crea Firebase user + users + partners (is_active=FALSE)
     dashboard/                resumen agregado
     organizations/            lista + detalle ([id])
-    subscriptions/            lista de suscripciones por org (plan, estado, vencimiento)
+    subscriptions/            lista de suscripciones por org (plan, estado, vencimiento) +
+                              resumen por estado + orgs patrocinadas activamente
+    subscriptions/payments/   historial de patrocinios pagados por este partner
     plans/                    catálogo de planes activos (para el selector de patrocinio)
-    activity/                 actividad reciente
+    credits/                  lotes de créditos de suscripción sin asignar
     reports/adoption/         % de adopción
     reports/trends/           series mensuales (adopción + ingresos, 6 meses)
     sponsor/                  POST — partner patrocina N meses de plan a una org
