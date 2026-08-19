@@ -13,6 +13,7 @@ import {
   DollarCircleOutlined,
   Bell1Outlined,
   Buildings1Outlined,
+  Rocket5Outlined,
 } from "@lineiconshq/free-icons";
 
 type SectorSlice = { industryId: number | null; industryName: string; count: number; pct: number };
@@ -31,6 +32,8 @@ type DashboardResponse = {
       incomeTrendPct: number | null;
       incomeOrgsSharing: number;
       transactionsThisMonth: number;
+      avgImpactPct: number | null;
+      impactOrgsCount: number;
     };
     sectorBreakdown: SectorSlice[];
     lastUpdated: string;
@@ -68,6 +71,25 @@ export default function DashboardPage() {
       </p>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {/* KPI 0 — Impacto del partner: crecimiento en actividad (sin
+            montos) desde que cada org se unió al portafolio, promediado.
+            Es el número que más le importa mostrarle a su directiva. */}
+        <StatCard
+          title="Impacto del portafolio"
+          value={
+            summary.avgImpactPct !== null
+              ? `${summary.avgImpactPct >= 0 ? "+" : ""}${summary.avgImpactPct}%`
+              : "—"
+          }
+          subtitle={
+            summary.impactOrgsCount > 0
+              ? `Crecimiento en actividad de ${summary.impactOrgsCount} org${summary.impactOrgsCount === 1 ? "" : "s"} desde que se unieron a vos`
+              : "Todavía no hay suficiente historial para medir impacto"
+          }
+          icon={Rocket5Outlined}
+          tone="green"
+        />
+
         {/* KPI 1 — Tasa de adopción */}
         <StatCard
           title="Tasa de adopción"

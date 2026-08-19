@@ -1,8 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { usePartnerSWR } from "@/hooks/use-partner-swr";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { InviteModal } from "@/components/partner/invite-modal";
 import { formatCurrency, formatDateShort } from "@/lib/utils";
 
 type OrgRow = {
@@ -39,11 +42,17 @@ const STATUS_VARIANT: Record<OrgRow["status"], "success" | "warning" | "muted"> 
 
 export default function OrganizationsPage() {
   const router = useRouter();
-  const { data, isLoading } = usePartnerSWR<OrgsResponse>("/api/partner/organizations");
+  const { data, isLoading, mutate } = usePartnerSWR<OrgsResponse>("/api/partner/organizations");
+  const [inviteOpen, setInviteOpen] = useState(false);
 
   return (
     <div>
-      <h1 className="mb-6 text-xl font-semibold">Emprendedores</h1>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-xl font-semibold">Emprendedores</h1>
+        <Button type="button" onClick={() => setInviteOpen(true)}>
+          + Agregar organización
+        </Button>
+      </div>
 
       {isLoading && <p className="text-sm text-muted-foreground">Cargando…</p>}
 
@@ -120,6 +129,14 @@ export default function OrganizationsPage() {
           </table>
         </div>
       )}
+
+      <InviteModal
+        open={inviteOpen}
+        onClose={() => {
+          setInviteOpen(false);
+          mutate();
+        }}
+      />
     </div>
   );
 }

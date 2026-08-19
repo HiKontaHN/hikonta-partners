@@ -22,6 +22,8 @@ import {
   Cart1Outlined,
   Wallet1Outlined,
   CalendarDaysOutlined,
+  DollarCircleOutlined,
+  Rocket5Outlined,
 } from "@lineiconshq/free-icons";
 
 type OrgDetail = {
@@ -50,7 +52,19 @@ type OrgDetail = {
   };
   monthsSponsored: number;
   weeklyTransactions: WeeklyTransactions[];
+  impact: {
+    beforeAvgMonthly: number;
+    afterAvgMonthly: number;
+    growthPct: number | null;
+    hasBaseline: boolean;
+    startedFromZero: boolean;
+  };
+  activityTrendPct: number | null;
   monthlyIncome: IncomeMonth[];
+  incomeThisMonth: number | null;
+  incomeTrendPct: number | null;
+  profitThisMonth: number | null;
+  profitTrendPct: number | null;
   recentSales: {
     id: number;
     saleNumber: string | null;
@@ -132,6 +146,8 @@ export default function OrganizationDetailPage() {
         </div>
       </div>
 
+      <ImpactBanner impact={org.impact} activityTrendPct={org.activityTrendPct} />
+
       <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard title="Ventas totales" value={org.counts.totalSales} icon={Cart1Outlined} tone="blue" />
         <StatCard
@@ -154,11 +170,34 @@ export default function OrganizationDetailPage() {
         />
       </div>
 
+      {org.shareFinancials && (
+        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <StatCard
+            title="Ingresos este mes"
+            value={formatCurrency(org.incomeThisMonth ?? 0)}
+            icon={DollarCircleOutlined}
+            tone="blue"
+            badge={<TrendBadge pct={org.incomeTrendPct} />}
+          />
+          <StatCard
+            title="Ganancias este mes"
+            value={formatCurrency(org.profitThisMonth ?? 0)}
+            icon={Wallet1Outlined}
+            tone="green"
+            badge={<TrendBadge pct={org.profitTrendPct} />}
+          />
+        </div>
+      )}
+
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <WeeklyTransactionsChart weeks={org.weeklyTransactions} />
 
         {org.shareFinancials ? (
-          <IncomeTrendChart months={org.monthlyIncome} title="Histórico de ingresos — últimos 12 meses" />
+          <IncomeTrendChart
+            months={org.monthlyIncome}
+            title="Ingresos vs ganancias — últimos 12 meses"
+            showProfit
+          />
         ) : (
           <Card className="flex flex-col items-center justify-center gap-2 p-8 text-center">
             <div className="flex h-11 w-11 items-center justify-center rounded-full bg-muted">
@@ -246,6 +285,65 @@ export default function OrganizationDetailPage() {
         currentPlanId={org.planId}
       />
     </div>
+  );
+}
+
+// Lo más importante para el partner: crecimiento en actividad (ventas +
+// transacciones, SIN montos) desde que la org se unió a su portafolio — ver
+// lib/impact.ts. Va primero en la página, arriba de las stat cards de
+// conteo, porque es el número que más le importa mostrarle a su directiva.
+function ImpactBanner({
+  impact,
+  activityTrendPct,
+}: {
+  impact: OrgDetail["impact"];
+  activityTrendPct: number | null;
+}) {
+  let headline: string;
+  let detail: string;
+
+  if (!impact.hasBaseline) {
+    headline = "Necesita más tiempo";
+    detail = "Se unió a tu portafolio hace poco — todavía no hay suficiente historial antes de vincularse para medir impacto.";
+  } else if (impact.startedFromZero) {
+    headline = "Empezó a operar";
+    detail = `Sin actividad antes de unirse a tu portafolio — ahora registra ~${impact.afterAvgMonthly}/mes.`;
+  } else if (impact.growthPct !== null) {
+    headline = `${impact.growthPct >= 0 ? "+" : ""}${impact.growthPct}%`;
+    detail = `~${impact.beforeAvgMonthly}/mes antes de unirse → ~${impact.afterAvgMonthly}/mes después.`;
+  } else {
+    headline = "Sin actividad";
+    detail = "Todavía no registra ventas ni transacciones.";
+  }
+
+  return (
+    <Card className="mt-6 p-5">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-chip-green-bg">
+            <Lineicons icon={Rocket5Outlined} size={20} color="var(--chip-green)" />
+          </div>
+          <div>
+            <p className="text-sm font-medium text-muted-foreground">Impacto desde que se unió a tu portafolio</p>
+            <p className="mt-0.5 text-2xl font-extrabold tracking-tight">{headline}</p>
+          </div>
+        </div>
+        <TrendBadge pct={activityTrendPct} />
+      </div>
+      <p className="mt-3 text-xs text-muted-foreground">{detail}</p>
+    </Card>
+  );
+}
+
+// Mismo criterio que el badge de tendencia de /dashboard: null cuando no
+// hay mes anterior con datos para comparar — nunca se inventa un %.
+function TrendBadge({ pct }: { pct: number | null }) {
+  if (pct === null) return null;
+  return (
+    <Badge variant={pct >= 0 ? "success" : "warning"}>
+      {pct >= 0 ? "+" : ""}
+      {pct}% vs mes anterior
+    </Badge>
   );
 }
 

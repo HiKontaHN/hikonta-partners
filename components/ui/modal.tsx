@@ -12,11 +12,16 @@ export function Modal({
   onClose,
   title,
   children,
+  maxWidthClassName = "max-w-sm",
 }: {
   open: boolean;
   onClose: () => void;
   title: string;
   children: ReactNode;
+  // La mayoría de los modales del panel son formularios cortos (max-w-sm
+  // alcanza) — este override es para contenido más ancho, como una tabla
+  // (ver InviteModal).
+  maxWidthClassName?: string;
 }) {
   useEffect(() => {
     if (!open) return;
@@ -36,7 +41,7 @@ export function Modal({
       role="presentation"
     >
       <div
-        className="card-elevated w-full max-w-sm rounded-2xl bg-card p-6"
+        className={`card-elevated w-full ${maxWidthClassName} rounded-2xl bg-card p-6`}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"

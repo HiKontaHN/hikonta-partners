@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { verifyPartner, createErrorResponse, isAuthSuccess, requireOwnedOrganization } from "@/lib/auth";
 import { sql } from "@/lib/db";
+import { computeImpact } from "@/lib/impact";
 
 const WEEKS = 8;
 const MONTHS = 12;
@@ -80,21 +81,109 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       ORDER BY w.week_start
     `;
 
-    // Histórico de ingresos (12 meses) — SOLO si la org autorizó compartir
-    // montos (share_financials), mismo gate que el resto del panel.
+    // Impacto del partner: crecimiento en actividad (ventas + transacciones,
+    // SIN montos) comparando el promedio mensual ANTES de vincularse a este
+    // portafolio vs DESPUÉS — ver lib/impact.ts. Nunca requiere
+    // share_financials: es puro conteo, no revela cuánto factura nadie.
+    const linkedAt = org.linked_at;
+    const [impactCounts] = await sql`
+      SELECT
+        (
+          (SELECT COUNT(*) FROM sales        WHERE org_id = ${orgId} AND sold_at     >= ${org.created_at}::timestamptz AND sold_at     < ${linkedAt}::timestamptz) +
+          (SELECT COUNT(*) FROM transactions WHERE org_id = ${orgId} AND occurred_at >= ${org.created_at}::timestamptz AND occurred_at < ${linkedAt}::timestamptz)
+        )::int AS before_count,
+        (
+          (SELECT COUNT(*) FROM sales        WHERE org_id = ${orgId} AND sold_at     >= ${linkedAt}::timestamptz) +
+          (SELECT COUNT(*) FROM transactions WHERE org_id = ${orgId} AND occurred_at >= ${linkedAt}::timestamptz)
+        )::int AS after_count
+    `;
+    const daysBefore = (new Date(linkedAt).getTime() - new Date(org.created_at).getTime()) / 86_400_000;
+    const daysAfter = (Date.now() - new Date(linkedAt).getTime()) / 86_400_000;
+    const impact = computeImpact({
+      beforeCount: Number(impactCounts.before_count),
+      afterCount: Number(impactCounts.after_count),
+      daysBefore,
+      daysAfter,
+    });
+
+    // Tendencia reciente de actividad (este mes vs anterior) — detalle de
+    // apoyo al número de impacto de arriba, mismo conteo ventas+transacciones,
+    // tampoco requiere share_financials.
+    const monthlyActivityRows = await sql`
+      WITH months AS (
+        SELECT date_trunc('month', now()) - (n || ' months')::interval AS month_start
+        FROM generate_series(${MONTHS - 1}, 0, -1) AS n
+      ),
+      monthly_sales AS (
+        SELECT m.month_start, COUNT(s.id)::int AS sales_count
+        FROM months m
+        LEFT JOIN sales s ON s.org_id = ${orgId}
+          AND s.sold_at >= m.month_start AND s.sold_at < m.month_start + INTERVAL '1 month'
+        GROUP BY m.month_start
+      ),
+      monthly_tx AS (
+        SELECT m.month_start, COUNT(t.id)::int AS tx_count
+        FROM months m
+        LEFT JOIN transactions t ON t.org_id = ${orgId}
+          AND t.occurred_at >= m.month_start AND t.occurred_at < m.month_start + INTERVAL '1 month'
+        GROUP BY m.month_start
+      )
+      SELECT ms.month_start, ms.sales_count + mt.tx_count AS count
+      FROM monthly_sales ms
+      JOIN monthly_tx mt ON mt.month_start = ms.month_start
+      ORDER BY ms.month_start
+    `;
+    const monthlyActivity = (monthlyActivityRows as any[]).map((r) => Number(r.count));
+    const activityThisMonth = monthlyActivity[monthlyActivity.length - 1] ?? 0;
+    const activityLastMonth = monthlyActivity[monthlyActivity.length - 2] ?? 0;
+    const activityTrendPct = activityLastMonth > 0
+      ? Number((((activityThisMonth - activityLastMonth) / activityLastMonth) * 100).toFixed(1))
+      : null;
+
+    // Histórico de ingresos vs ganancias (12 meses) — SOLO si la org
+    // autorizó compartir montos (share_financials), mismo gate que el
+    // resto del panel. Ganancia = line_total - costo - impuesto
+    // proporcional, misma fórmula que "Ventas vs Ganancias" en
+    // yelifin-sistema (comparten la misma base Neon, ver lib/db.ts).
+    // Ingreso y ganancia se calculan en CTEs separados: unirlos en un solo
+    // JOIN contra sale_items multiplicaría s.total por cada línea de venta.
     const shareFinancials = org.share_financials === true;
     const monthlyIncomeRows = shareFinancials
       ? await sql`
           WITH months AS (
             SELECT date_trunc('month', now()) - (n || ' months')::interval AS month_start
             FROM generate_series(${MONTHS - 1}, 0, -1) AS n
+          ),
+          monthly_income AS (
+            SELECT m.month_start, COALESCE(SUM(s.total), 0) AS income
+            FROM months m
+            LEFT JOIN sales s ON s.org_id = ${orgId}
+              AND s.sold_at >= m.month_start AND s.sold_at < m.month_start + INTERVAL '1 month'
+            GROUP BY m.month_start
+          ),
+          monthly_profit AS (
+            SELECT m.month_start, COALESCE(SUM(
+              si.line_total
+              - (si.unit_cost * si.quantity)
+              - COALESCE(
+                  CASE
+                    WHEN (s.subtotal - s.discount) > 0
+                    THEN (s.tax * si.line_total / (s.subtotal - s.discount))
+                    ELSE 0
+                  END,
+                  0
+                )
+            ), 0) AS profit
+            FROM months m
+            LEFT JOIN sales s ON s.org_id = ${orgId}
+              AND s.sold_at >= m.month_start AND s.sold_at < m.month_start + INTERVAL '1 month'
+            LEFT JOIN sale_items si ON si.sale_id = s.id AND si.org_id = s.org_id
+            GROUP BY m.month_start
           )
-          SELECT m.month_start, COALESCE(SUM(s.total), 0) AS income
-          FROM months m
-          LEFT JOIN sales s ON s.org_id = ${orgId}
-            AND s.sold_at >= m.month_start AND s.sold_at < m.month_start + INTERVAL '1 month'
-          GROUP BY m.month_start
-          ORDER BY m.month_start
+          SELECT mi.month_start, mi.income, mp.profit
+          FROM monthly_income mi
+          JOIN monthly_profit mp ON mp.month_start = mi.month_start
+          ORDER BY mi.month_start
         `
       : [];
 
@@ -105,6 +194,23 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       ORDER BY sold_at DESC
       LIMIT ${RECENT_SALES}
     `;
+
+    // Montos financieros: solo si share_financials = TRUE (ver arquitectura)
+    const monthlyIncome = (monthlyIncomeRows as any[]).map((r) => ({
+      month: new Date(r.month_start).toISOString().slice(0, 7),
+      income: Number(r.income),
+      profit: Number(r.profit),
+    }));
+
+    // Tendencia % (este mes vs anterior) para ingresos y ganancias — mismo
+    // cálculo que /api/partner/dashboard y /api/partner/organizations, pero
+    // derivado de monthlyIncome (ya trae los últimos 12 meses ordenados
+    // ascendente) en vez de otra query: el mes actual es el último elemento,
+    // el anterior el penúltimo.
+    const currentMonth = monthlyIncome[monthlyIncome.length - 1] ?? null;
+    const previousMonth = monthlyIncome[monthlyIncome.length - 2] ?? null;
+    const pctChange = (curr: number, prev: number) =>
+      prev > 0 ? Number((((curr - prev) / prev) * 100).toFixed(1)) : null;
 
     return Response.json({
       data: {
@@ -136,11 +242,29 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
           weekStart: new Date(r.week_start).toISOString().slice(0, 10),
           count: r.count,
         })),
-        // Montos financieros: solo si share_financials = TRUE (ver arquitectura)
-        monthlyIncome: (monthlyIncomeRows as any[]).map((r) => ({
-          month: new Date(r.month_start).toISOString().slice(0, 7),
-          income: Number(r.income),
-        })),
+        // Impacto: crecimiento en actividad desde que se unió al portafolio
+        // (sin montos, ver lib/impact.ts) — lo que más le importa al partner.
+        impact: {
+          beforeAvgMonthly: impact.beforeAvgMonthly,
+          afterAvgMonthly: impact.afterAvgMonthly,
+          growthPct: impact.growthPct,
+          hasBaseline: impact.hasBaseline,
+          startedFromZero: impact.startedFromZero,
+        },
+        activityTrendPct,
+        monthlyIncome,
+        // Este mes vs mes anterior — null si la org no comparte montos o no
+        // hay mes anterior con datos para comparar (nunca se inventa un %).
+        incomeThisMonth: shareFinancials ? (currentMonth?.income ?? 0) : null,
+        incomeTrendPct:
+          shareFinancials && currentMonth && previousMonth
+            ? pctChange(currentMonth.income, previousMonth.income)
+            : null,
+        profitThisMonth: shareFinancials ? (currentMonth?.profit ?? 0) : null,
+        profitTrendPct:
+          shareFinancials && currentMonth && previousMonth
+            ? pctChange(currentMonth.profit, previousMonth.profit)
+            : null,
         recentSales: (recentSalesRows as any[]).map((s) => ({
           id: s.id,
           saleNumber: s.sale_number,

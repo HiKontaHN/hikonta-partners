@@ -10,6 +10,8 @@ repo — **hay que ejecutarlas ahí antes de usar este proyecto**:
 
 1. `database/partners/01-migrate-subscription-payments.sql`
 2. `database/partners/02-partners-infrastructure.sql`
+3. `database/partners/04-invite-codes.sql` — tabla `partner_invite_codes`, requerida por
+   "Agregar organización" (botón en `/organizations`, ver más abajo)
 
 ## Por qué es un repo aparte
 
@@ -37,7 +39,14 @@ npm run dev
 ```
 
 `.env.local` ya está poblado con las mismas credenciales que `yelifin-sistema/.env.local`
-(mismo Neon, mismo Firebase) — no está en git (ver `.gitignore`).
+(mismo Neon, mismo Firebase) — no está en git (ver `.gitignore`). Agregar además:
+
+```
+NEXT_PUBLIC_MAIN_APP_URL=https://hikonta.app   # o el dominio de yelifin-sistema en dev/staging
+```
+
+Se usa para armar el enlace de registro (`{NEXT_PUBLIC_MAIN_APP_URL}/register?ref=CODIGO`) del
+botón "Agregar organización" — ver sección de abajo. Sin esta var cae al default de producción.
 
 ## KPIs del dashboard
 
@@ -80,6 +89,7 @@ app/
     reports/adoption/         % de adopción
     reports/trends/           series mensuales (adopción + ingresos, 6 meses)
     sponsor/                  POST — partner patrocina N meses de plan a una org
+    invites/                  GET lista + POST genera código de invitación; [id] DELETE cancela
 lib/
   auth.ts                     verifyPartner() — análogo a verifyAdmin() del app principal
   billing.ts                  applySubscriptionPayment() — aplica pagos/patrocinios a org_subscriptions
@@ -101,18 +111,23 @@ proxy.ts                      middleware (convención Next 16) — protege /(par
 - **Registro = solicitud, no acceso inmediato.** `POST /api/partner/register` crea todo
   (Firebase user + `users` + `partners`) pero con `partners.is_active = FALSE`. El coordinador
   puede loguearse de inmediato, pero `verifyPartner()` sigue negando acceso (403,
-  `reason: "PENDING_APPROVAL"`) hasta que alguien active la fila manualmente y la vincule a
-  organizaciones vía `partner_organizations` — no hay UI de aprobación todavía, se hace directo en
-  Neon. `hooks/use-auth.ts` distingue este caso ("pending") de "no autenticado" para no generar un
-  loop de redirects entre `/login` y `/dashboard`.
+  `reason: "PENDING_APPROVAL"`) hasta que alguien active la fila manualmente — no hay UI de
+  aprobación todavía, se hace directo en Neon (ver abajo). `hooks/use-auth.ts` distingue este caso
+  ("pending") de "no autenticado" para no generar un loop de redirects entre `/login` y `/dashboard`.
+- **Vincular una org al portafolio SÍ tiene UI — "Agregar organización" en `/organizations`.**
+  Resuelve la pregunta abierta #6 de `partner-dashboard-architecture.md`. El partner genera un
+  código (`partner_invite_codes`, `database/partners/04-invite-codes.sql`); el emprendedor lo
+  canjea del lado de `yelifin-sistema` — en `/register?ref=CODIGO` si es cuenta nueva, o en
+  Configuración → Organización si ya tiene cuenta. El vínculo lo crea SIEMPRE el canje del
+  emprendedor (`redeemPartnerInviteCode()` en `yelifin-sistema/lib/partner-invites.ts`), nunca este
+  repo directamente — mismo espíritu de opt-in que `share_financials`. `INSERT` manual a
+  `partner_organizations` sigue siendo válido como fallback (ej. importar el seed de dev), pero ya
+  no es el único camino.
 
 ### Aprobar un partner manualmente (mientras no haya UI de admin)
 
 ```sql
 UPDATE partners SET is_active = TRUE WHERE id = <id>;
-
-INSERT INTO partner_organizations (partner_id, org_id)
-VALUES (<partner_id>, <org_id>);
 ```
 
 ## Deploy (pendiente de hacer)

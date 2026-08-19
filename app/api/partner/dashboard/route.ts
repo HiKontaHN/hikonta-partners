@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { verifyPartner, createErrorResponse, isAuthSuccess } from "@/lib/auth";
 import { sql } from "@/lib/db";
+import { computeImpact } from "@/lib/impact";
 
 // Umbrales de actividad — ver documentation/dashboard.md.
 // No hay tracking de login en HiKonta, así que "actividad" se deriva de
@@ -62,6 +63,39 @@ export async function GET(request: NextRequest) {
     const incomeTrendPct =
       lastMonthIncome > 0 ? ((thisMonthIncome - lastMonthIncome) / lastMonthIncome) * 100 : null;
 
+    // Impacto del partner: crecimiento en actividad (ventas + transacciones,
+    // SIN montos) de cada org, promedio ANTES vs DESPUÉS de vincularse —
+    // ver lib/impact.ts. Es lo que más le importa al partner: los montos no
+    // siempre se reportan bien y no es apropiado mostrárselos (feedback
+    // real, ver documentation/progress.md), pero un conteo de actividad sí.
+    const impactRows = await sql`
+      SELECT
+        o.created_at, po.linked_at,
+        (SELECT COUNT(*) FROM sales s WHERE s.org_id = o.id
+           AND s.sold_at >= o.created_at AND s.sold_at < po.linked_at) AS sales_before,
+        (SELECT COUNT(*) FROM transactions t WHERE t.org_id = o.id
+           AND t.occurred_at >= o.created_at AND t.occurred_at < po.linked_at) AS tx_before,
+        (SELECT COUNT(*) FROM sales s WHERE s.org_id = o.id AND s.sold_at >= po.linked_at) AS sales_after,
+        (SELECT COUNT(*) FROM transactions t WHERE t.org_id = o.id AND t.occurred_at >= po.linked_at) AS tx_after
+      FROM organizations o
+      JOIN partner_organizations po ON po.org_id = o.id AND po.partner_id = ${auth.data.partnerId}
+    `;
+    const impacts = (impactRows as any[]).map((r) =>
+      computeImpact({
+        beforeCount: Number(r.sales_before) + Number(r.tx_before),
+        afterCount: Number(r.sales_after) + Number(r.tx_after),
+        daysBefore: (new Date(r.linked_at).getTime() - new Date(r.created_at).getTime()) / 86_400_000,
+        daysAfter: (now - new Date(r.linked_at).getTime()) / 86_400_000,
+      })
+    );
+    // Solo promedia orgs con suficiente historial "antes" para comparar —
+    // igual criterio que el detalle de organización, nunca se inventa un %.
+    const impactGrowths = impacts.map((i) => i.growthPct).filter((pct): pct is number => pct !== null);
+    const avgImpactPct =
+      impactGrowths.length > 0
+        ? Number((impactGrowths.reduce((sum, pct) => sum + pct, 0) / impactGrowths.length).toFixed(1))
+        : null;
+
     // Volumen de transacciones (conteo, no monto — no requiere opt-in
     // financiero, un conteo no revela cuánto factura nadie).
     const [txCount] = await sql`
@@ -97,6 +131,8 @@ export async function GET(request: NextRequest) {
           incomeTrendPct: incomeTrendPct !== null ? Number(incomeTrendPct.toFixed(1)) : null,
           incomeOrgsSharing: income.orgs_sharing,
           transactionsThisMonth: txCount.count,
+          avgImpactPct,
+          impactOrgsCount: impactGrowths.length,
         },
         sectorBreakdown: (sectorRows as any[]).map((s) => ({
           industryId: s.industry_id,
