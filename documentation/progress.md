@@ -184,3 +184,54 @@ npm run dev   # bypass activo — vas a ver el panel con datos reales del seed s
 Para desactivar el bypass y probar el login real: `NEXT_PUBLIC_BYPASS_AUTH="false"` en
 `.env.local`, y crear un usuario real vía `/register` (queda pendiente de aprobación — activarlo
 manualmente en Neon, ver sección 8 del `README.md`).
+
+---
+
+## 10. Seguridad — hardening portado de `hikonta-admin`
+
+`hikonta-admin` (el panel de administración interno de HiKonta, repo hermano) ya había resuelto
+varios problemas de seguridad/login que este repo todavía no tenía. Se revisó ese repo y se portó
+lo aplicable:
+
+| Cambio | Archivo(s) | Detalle |
+|---|---|---|
+| Rate limiter en memoria por IP (nuevo) | `lib/rate-limit.ts` | No existía ningún rate limiting en este repo. Copiado tal cual de `hikonta-admin` (que a su vez lo copió de `yelifin-sistema`) |
+| Rate limit global en `/api/*` | `proxy.ts` | 300 solicitudes/minuto por IP, antes de llegar a cualquier route handler |
+| Rate limit por endpoint sensible | `app/api/partner/register/route.ts` (10/15min), `app/api/partner/sponsor/route.ts` (30/15min) | Igual criterio que `create-user`/`add-admin`/`register-payment` en `hikonta-admin`: rutas que crean usuarios o escriben pagos reales |
+| **Bug real corregido** en `proxy.ts` | `proxy.ts` | `verifyFirebaseToken()` usa `crypto.subtle.importKey("spki", ...)` sobre el DER de un certificado X.509 completo — eso **siempre falla**, incluso con un token legítimo (no es una estructura SPKI válida). Antes, el middleware redirigía duro a `/login` cuando esa verificación "fallaba", lo que significa que **cualquier navegación directa o refresh de una ruta protegida iba a rebotar a `/login`** aunque la sesión fuera válida. Está dormido hoy porque `NEXT_PUBLIC_BYPASS_AUTH=true` salta todo `proxy.ts` en dev — iba a explotar apenas se desplegara a producción con el bypass apagado. Ahora, sin cookie o con token "inválido" según ese chequeo roto, el middleware deja pasar (`NextResponse.next()`) — la identidad real la sigue validando cada API route con `verifyPartner()` (Node runtime, `firebase-admin`, sin este bug) y el cliente con `useAuth()` + el redirect en `app/(partner)/layout.tsx` |
+| Fix de condición de carrera en el cookie de sesión | `app/login/page.tsx`, `app/register/page.tsx` | Antes: `signInWithEmailAndPassword()` + `router.push("/dashboard")` inmediato, confiando en que el listener async `onIdTokenChanged` de `useAuth()` alcanzara a setear la cookie `token` antes de que `proxy.ts` la necesitara — carrera real, podía rebotar a `/login`. Ahora: se setea la cookie explícitamente con `setTokenCookie(idToken)` antes de navegar, y se usa `window.location.href` (hard reload) en vez de `router.push()` para evitar que el router cache del cliente sirva una respuesta vieja |
+
+No se tocaron `lib/auth.ts`, `hooks/use-auth.ts`, `lib/firebase-admin.ts`, `lib/token-cookie.ts` —
+ya eran equivalentes funcionales a los de `hikonta-admin` (solo cambian nombres de dominio
+Partner/Admin, o el fin de línea CRLF/LF).
+
+⚠️ Importante: con `NEXT_PUBLIC_BYPASS_AUTH="true"` (ver sección 6), nada de `proxy.ts` se
+ejecuta — para probar estos fixes de verdad hay que apagar el bypass.
+
+---
+
+## 11. Features de `documentation/ideas-feasibility.md` aplicadas
+
+De la lista ✅ ("dato existente, solo falta exponerlo") de ese doc, esto es lo que se implementó
+en esta sesión (lo demás ya estaba expuesto de antes — ventas, clientes, alerta de 30 días, etc.):
+
+- **Sector/industria** (`organizations.industry_id` → `industries`, migrado en v4.10 pero sin
+  ningún endpoint que lo usara todavía): join agregado en `organizations/route.ts` y
+  `organizations/[id]/route.ts`, badge en la tabla de Emprendedores y en el header del detalle.
+- **Distribución por sector — sección 14**: `GROUP BY industry_id` nuevo en
+  `dashboard/route.ts` (`sectorBreakdown`), card con barras por sector en el Dashboard.
+- **Reporte para terceros — sección 19**: `reports/adoption/route.ts` ahora devuelve también
+  `impact: { beneficiaries, totalSalesGenerated, sectorsBenefited }` — ventas generadas es
+  histórico completo (no solo el mes en curso), gateado por `share_financials` igual que el resto
+  del panel. Nueva sección en la página de Reportes pensada para copiar/pegar a un patrocinador.
+- **Suscripciones — historial detallado**: hasta ahora `/subscriptions` solo mostraba el estado
+  *actual* de cada org, sin ningún registro de pagos pasados (a diferencia de `hikonta-admin`, que
+  tiene una página `/payments` completa con historial, búsqueda, filtro y paginación sobre
+  `subscription_payments`). Se agregó `GET /api/partner/subscriptions/payments` — mismo nivel de
+  detalle, acotado a `paid_by_partner_id = este partner` (no todos los pagos de sus orgs, solo lo
+  que el partner efectivamente patrocinó) — y una sección "Historial de patrocinios" en la página,
+  con búsqueda por negocio, filtro por estado, paginación y total histórico ($ y meses).
+
+Lo marcado 🔴 en ese doc (cohortes, mentores, hitos, financiamiento, empleo real) sigue sin
+implementarse — requiere tablas nuevas y captura manual, no se deriva de nada que HiKonta registre
+hoy. Ver el doc para el detalle completo de qué falta y por qué.
