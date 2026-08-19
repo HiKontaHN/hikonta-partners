@@ -2,16 +2,15 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "@/firebase.config";
+import { setTokenCookie } from "@/lib/token-cookie";
 import { HiKontaIcon } from "@/components/shared/hikonta-icon";
 import { PasswordField } from "@/components/ui/password-field";
 import { Lineicons } from "@lineiconshq/react-lineicons";
 import { Buildings1Outlined, User4Outlined, Envelope1Outlined } from "@lineiconshq/free-icons";
 
 export default function RegisterPage() {
-  const router = useRouter();
   const [form, setForm] = useState({
     incubatorName: "",
     contactName: "",
@@ -46,8 +45,13 @@ export default function RegisterPage() {
       // Registrado — se inicia sesión de una vez. La cuenta queda pendiente
       // de aprobación (is_active = FALSE), así que el layout del panel va a
       // mostrar la pantalla de "pendiente" en vez del dashboard.
-      await signInWithEmailAndPassword(auth, form.email.trim(), form.password);
-      router.push("/dashboard");
+      const cred = await signInWithEmailAndPassword(auth, form.email.trim(), form.password);
+      // Mismo fix que app/login/page.tsx: setear la cookie acá antes de
+      // navegar (no depender del listener async de useAuth()) y hacer una
+      // navegación dura para que proxy.ts vea la cookie ya puesta.
+      const idToken = await cred.user.getIdToken();
+      setTokenCookie(idToken);
+      window.location.href = "/dashboard";
     } catch {
       setError("Ocurrió un error inesperado. Intenta de nuevo.");
     } finally {

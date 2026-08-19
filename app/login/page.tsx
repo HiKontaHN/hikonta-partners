@@ -2,16 +2,15 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "@/firebase.config";
+import { setTokenCookie } from "@/lib/token-cookie";
 import { HiKontaIcon } from "@/components/shared/hikonta-icon";
 import { PasswordField } from "@/components/ui/password-field";
 import { Lineicons } from "@lineiconshq/react-lineicons";
 import { Envelope1Outlined } from "@lineiconshq/free-icons";
 
 export default function LoginPage() {
-  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -22,8 +21,20 @@ export default function LoginPage() {
     setError(null);
     setLoading(true);
     try {
-      await signInWithEmailAndPassword(auth, email.trim(), password);
-      router.push("/dashboard");
+      const cred = await signInWithEmailAndPassword(auth, email.trim(), password);
+      // proxy.ts (middleware) valida la cookie `token`, no el estado de
+      // Firebase en el cliente — hay que setearla ACÁ antes de navegar. Si
+      // se deja que la setee el listener onIdTokenChanged de useAuth() (que
+      // dispara async, después de esta función), router.push llega primero:
+      // el middleware no encuentra cookie y rebota de vuelta a /login.
+      const idToken = await cred.user.getIdToken();
+      setTokenCookie(idToken);
+      // Navegación dura, no router.push(). El router cache del cliente puede
+      // haber guardado una respuesta previa de /dashboard (redirigida a
+      // /login por el middleware, de antes de tener cookie) y servirla de
+      // nuevo sin volver a pasar por proxy.ts. Un reload completo garantiza
+      // una petición fresca con la cookie ya seteada.
+      window.location.href = "/dashboard";
     } catch {
       setError("Correo o contraseña incorrectos");
     } finally {

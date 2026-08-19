@@ -4,6 +4,7 @@
 // con un Firebase ID token válido y verificado en Edge.
 
 import { NextRequest, NextResponse } from "next/server";
+import { rateLimit, getClientIP } from "@/lib/rate-limit";
 
 const PUBLIC_PATHS = ["/", "/login", "/register"];
 
@@ -90,9 +91,30 @@ export async function proxy(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
+  // ── Rate limit global para toda la API ─────────────────────────────
+  // Portado de proxy.ts en hikonta-admin (que a su vez lo tomó de
+  // yelifin-sistema): 300 solicitudes por minuto por IP, antes de que la
+  // request llegue a ninguna route (que hace su propia verifyPartner()
+  // aparte, esto no la reemplaza). Endpoints puntuales especialmente
+  // sensibles (ej. registro público de partner) tienen además su propio
+  // límite más estricto dentro del route handler — ver lib/rate-limit.ts.
+  if (pathname.startsWith("/api")) {
+    const { allowed, retryAfterSec } = rateLimit(
+      `api:${getClientIP(request)}`,
+      300,
+      60 * 1000,
+    );
+    if (!allowed) {
+      return NextResponse.json(
+        { error: "Demasiadas solicitudes. Intentá de nuevo en unos segundos." },
+        { status: 429, headers: { "Retry-After": String(retryAfterSec) } },
+      );
+    }
+    return NextResponse.next();
+  }
+
   if (
     pathname.startsWith("/_next") ||
-    pathname.startsWith("/api") || // las rutas API hacen su propia verifyPartner()
     pathname.includes(".")
   ) {
     return NextResponse.next();
@@ -102,16 +124,27 @@ export async function proxy(request: NextRequest) {
   // "/" es match exacto — con startsWith solo, matchearía cualquier ruta.
   const isPublic = PUBLIC_PATHS.some((p) => (p === "/" ? pathname === "/" : pathname.startsWith(p)));
 
-  if (!token) {
-    return isPublic ? NextResponse.next() : NextResponse.redirect(new URL("/login", request.url));
-  }
+  // Portado de proxy.ts en hikonta-admin: sin cookie o token inválido,
+  // DEJAR PASAR (NextResponse.next()), no redirigir duro. Este gate de Edge
+  // runtime no es la capa de seguridad real — no puede serlo,
+  // verifyFirebaseToken() de acá arriba usa
+  // crypto.subtle.importKey("spki", ...) sobre el DER de un certificado
+  // X.509 completo, que NO es una estructura SPKI válida — falla siempre,
+  // para cualquier token, incluso uno perfectamente legítimo. Antes esto
+  // redirigía duro a /login cuando el token no era "válido", lo que
+  // significa que CUALQUIER navegación directa o refresh de una ruta
+  // protegida (con sesión real y cookie real) rebotaba a /login — bug
+  // dormido hoy porque NEXT_PUBLIC_BYPASS_AUTH está activo en dev y se
+  // saltea todo este archivo. La identidad real se valida en cada API route
+  // vía verifyPartner() (firebase-admin, runtime Node, sin este bug) y en
+  // el cliente vía useAuth() + el redirect de app/(partner)/layout.tsx.
+  if (!token) return NextResponse.next();
 
   const result = await verifyFirebaseToken(token);
-  if (!result.valid) {
-    return isPublic ? NextResponse.next() : NextResponse.redirect(new URL("/login", request.url));
-  }
+  if (!result.valid) return NextResponse.next();
 
-  // Token válido + ruta pública (/login) → mandar directo al dashboard
+  // Token válido + ruta pública (/login, /register) → mandar directo al
+  // dashboard.
   if (isPublic) {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }

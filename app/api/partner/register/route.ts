@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { adminAuth } from "@/lib/firebase-admin";
 import { sql } from "@/lib/db";
 import { createErrorResponse } from "@/lib/auth";
+import { rateLimit, getClientIP } from "@/lib/rate-limit";
 
 // POST /api/partner/register — pública, sin verifyPartner().
 // Crea el usuario en Firebase + su fila en `users` + su fila en `partners`
@@ -11,6 +12,23 @@ import { createErrorResponse } from "@/lib/auth";
 // en yelifin-sistema, sección "Preguntas abiertas").
 export async function POST(request: NextRequest) {
   try {
+    // Rate limit propio, más estricto que el global de proxy.ts (300/min) —
+    // mismo patrón que los endpoints sensibles de hikonta-admin
+    // (create-user, add-admin): esta ruta es pública, sin auth, y crea un
+    // usuario de Firebase + filas en Postgres por request, así que es el
+    // blanco más barato de spamear/abusar de todo el panel de partners.
+    const { allowed, retryAfterSec } = rateLimit(
+      `register:${getClientIP(request)}`,
+      10,
+      15 * 60 * 1000,
+    );
+    if (!allowed) {
+      return Response.json(
+        { error: "Demasiados intentos de registro. Intentá de nuevo más tarde." },
+        { status: 429, headers: { "Retry-After": String(retryAfterSec) } },
+      );
+    }
+
     const {
       incubatorName,
       contactName,
