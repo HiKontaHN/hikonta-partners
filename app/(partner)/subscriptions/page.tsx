@@ -14,6 +14,7 @@ import {
   Search1Outlined,
   ArrowLeftOutlined,
   ArrowRightOutlined,
+  Ticket1Outlined,
 } from "@lineiconshq/free-icons";
 
 type SubscriptionRow = {
@@ -172,7 +173,105 @@ export default function SubscriptionsPage() {
         />
       )}
 
+      <CreditsSection />
+
       <PaymentHistorySection key={paymentsRefreshKey} />
+    </div>
+  );
+}
+
+// ── Créditos de suscripción ──────────────────────────────────────────────
+// Lotes que HiKonta te facturó por adelantado (N suscripciones de M meses,
+// sin organización asignada todavía) — ver GET /api/partner/credits. Es de
+// SOLO LECTURA a propósito: el lote lo arma un admin de HiKonta desde su
+// panel, no vos. Repartir cada crédito por link o email a un emprendedor
+// nuevo es un paso que todavía no existe — cuando esté construido, esta
+// misma sección es donde va a vivir esa acción.
+
+type CreditBatchRow = {
+  id: number;
+  plan_name: string;
+  months: number;
+  quantity: number;
+  list_unit_price_usd: number;
+  unit_price_usd: number;
+  total_usd: number;
+  currency: string;
+  created_at: string;
+  pending_count: number;
+  claimed_count: number;
+  revoked_count: number;
+};
+
+type CreditsResponse = {
+  data: CreditBatchRow[];
+  totals: { pending: number; claimed: number };
+};
+
+function CreditsSection() {
+  const { data, isLoading } = usePartnerSWR<CreditsResponse>("/api/partner/credits");
+
+  if (!isLoading && (!data || data.data.length === 0)) return null;
+
+  return (
+    <div className="mt-10">
+      <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold">Créditos de suscripción</h2>
+          <p className="text-sm text-muted-foreground">
+            Lotes que HiKonta te facturó por adelantado — todavía sin repartir a ningún negocio.
+          </p>
+        </div>
+        {data && data.totals.pending > 0 && (
+          <p className="text-sm text-muted-foreground">
+            <span className="font-bold text-foreground">{data.totals.pending}</span> pendiente
+            {data.totals.pending === 1 ? "" : "s"} de asignar
+          </p>
+        )}
+      </div>
+
+      {isLoading && <p className="text-sm text-muted-foreground">Cargando…</p>}
+
+      {data && data.data.length > 0 && (
+        <div className="card-elevated overflow-x-auto rounded-xl bg-card">
+          <table className="w-full text-sm">
+            <thead className="text-left text-muted-foreground">
+              <tr>
+                <th className="px-3 py-3 font-semibold sm:px-5">Plan</th>
+                <th className="px-3 py-3 font-semibold sm:px-5">Duración</th>
+                <th className="px-3 py-3 font-semibold sm:px-5">Cantidad</th>
+                <th className="px-3 py-3 font-semibold sm:px-5">Total pagado</th>
+                <th className="px-3 py-3 font-semibold sm:px-5">Créditos</th>
+                <th className="px-3 py-3 font-semibold sm:px-5">Comprado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.data.map((b) => (
+                <tr key={b.id} className="border-t border-border first:border-0">
+                  <td className="px-3 py-3 font-bold sm:px-5">
+                    <Lineicons icon={Ticket1Outlined} size={14} className="mr-1.5 inline text-muted-foreground" />
+                    {b.plan_name}
+                  </td>
+                  <td className="px-3 py-3 sm:px-5">
+                    {b.months} mes{b.months === 1 ? "" : "es"}
+                  </td>
+                  <td className="px-3 py-3 sm:px-5">{b.quantity}</td>
+                  <td className="px-3 py-3 font-semibold sm:px-5">${b.total_usd.toFixed(2)}</td>
+                  <td className="px-3 py-3 sm:px-5">
+                    <span className="text-muted-foreground">
+                      {b.pending_count} pendiente{b.pending_count === 1 ? "" : "s"}
+                    </span>
+                    {b.claimed_count > 0 && (
+                      <span className="ml-1.5 text-chip-green">· {b.claimed_count} asignado{b.claimed_count === 1 ? "" : "s"}</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-3 text-muted-foreground sm:px-5">{formatDateShort(b.created_at)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
