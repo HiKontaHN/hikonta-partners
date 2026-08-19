@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { SponsorModal } from "@/components/partner/sponsor-modal";
 import { StatCard } from "@/components/partner/stat-card";
 import { WeeklyTransactionsChart, type WeeklyTransactions } from "@/components/partner/weekly-transactions-chart";
-import { IncomeTrendChart, type IncomeMonth } from "@/components/partner/income-trend-chart";
+import { IncomeTrendChart } from "@/components/partner/income-trend-chart";
 import { formatCurrency, formatDate, formatDateShort } from "@/lib/utils";
 import { Lineicons } from "@lineiconshq/react-lineicons";
 import {
@@ -60,7 +60,15 @@ type OrgDetail = {
     startedFromZero: boolean;
   };
   activityTrendPct: number | null;
-  monthlyIncome: IncomeMonth[];
+  // Gráfico de ingresos/ganancias — SIEMPRE viene, sin importar
+  // shareFinancials. mode "amount" trae montos reales, "percent" trae solo
+  // % de variación entre períodos (nunca un monto) — ver
+  // /api/partner/organizations/[id].
+  financialChart: {
+    mode: "amount" | "percent";
+    granularity: "month" | "day";
+    points: { period: string; income: number | null; profit: number | null }[];
+  };
   incomeThisMonth: number | null;
   incomeTrendPct: number | null;
   profitThisMonth: number | null;
@@ -90,7 +98,10 @@ const STATUS_VARIANT: Record<OrgDetail["status"], "success" | "warning" | "muted
 
 export default function OrganizationDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const { data, isLoading, error, mutate } = usePartnerSWR<OrgDetailResponse>(`/api/partner/organizations/${id}`);
+  const [period, setPeriod] = useState("12m");
+  const { data, isLoading, isValidating, error, mutate } = usePartnerSWR<OrgDetailResponse>(
+    `/api/partner/organizations/${id}?period=${period}`
+  );
   const [sponsorOpen, setSponsorOpen] = useState(false);
 
   if (isLoading) return <p className="text-sm text-muted-foreground">Cargando…</p>;
@@ -192,23 +203,36 @@ export default function OrganizationDetailPage() {
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <WeeklyTransactionsChart weeks={org.weeklyTransactions} />
 
-        {org.shareFinancials ? (
-          <IncomeTrendChart
-            months={org.monthlyIncome}
-            title="Ingresos vs ganancias — últimos 12 meses"
-            showProfit
-          />
-        ) : (
-          <Card className="flex flex-col items-center justify-center gap-2 p-8 text-center">
-            <div className="flex h-11 w-11 items-center justify-center rounded-full bg-muted">
-              <Lineicons icon={Wallet1Outlined} size={20} className="text-muted-foreground" />
-            </div>
-            <p className="text-sm font-semibold">Ingresos no disponibles</p>
-            <p className="max-w-xs text-xs text-muted-foreground">
-              Este emprendedor no autorizó compartir sus montos. Solo ves actividad y adopción.
-            </p>
-          </Card>
-        )}
+        <div className="flex flex-col gap-2">
+          <div className="flex justify-end">
+            <PeriodSelect value={period} onChange={setPeriod} />
+          </div>
+          {/* Este gráfico SIEMPRE se muestra — si la org no autorizó
+              compartir montos (share_financials), la API ya viene en modo
+              "percent" (solo % de variación entre períodos, nunca un
+              monto), así que acá no hace falta ningún gate. opacity baja
+              mientras se revalida el nuevo período — evita el parpadeo de
+              "Cargando…" de página completa (keepPreviousData en
+              usePartnerSWR mantiene el gráfico anterior visible mientras
+              tanto). */}
+          <div className={isValidating ? "opacity-60 transition-opacity" : "transition-opacity"}>
+            <IncomeTrendChart
+              months={org.financialChart.points.map((p) => ({
+                month: p.period,
+                income: p.income,
+                profit: p.profit,
+              }))}
+              mode={org.financialChart.mode}
+              granularity={org.financialChart.granularity}
+              showProfit
+              note={
+                org.financialChart.mode === "percent"
+                  ? "Este emprendedor no autorizó compartir montos — se muestra la variación % entre períodos."
+                  : undefined
+              }
+            />
+          </div>
+        </div>
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[2fr_1fr]">
@@ -344,6 +368,32 @@ function TrendBadge({ pct }: { pct: number | null }) {
       {pct >= 0 ? "+" : ""}
       {pct}% vs mes anterior
     </Badge>
+  );
+}
+
+// Mismas 5 opciones que PERIOD_PRESETS en /api/partner/organizations/[id] —
+// si se agrega una acá hay que agregarla también del lado de la API.
+const PERIOD_OPTIONS: { value: string; label: string }[] = [
+  { value: "7d", label: "Últimos 7 días" },
+  { value: "30d", label: "Últimos 30 días" },
+  { value: "3m", label: "Últimos 3 meses" },
+  { value: "6m", label: "Últimos 6 meses" },
+  { value: "12m", label: "Últimos 12 meses" },
+];
+
+function PeriodSelect({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="rounded-full border-0 bg-muted px-3 py-1.5 text-xs font-semibold outline-none ring-1 ring-transparent focus:ring-2 focus:ring-ring"
+    >
+      {PERIOD_OPTIONS.map((o) => (
+        <option key={o.value} value={o.value}>
+          {o.label}
+        </option>
+      ))}
+    </select>
   );
 }
 

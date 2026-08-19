@@ -15,6 +15,14 @@ export function usePartnerSWR<T>(path: string | null) {
       if (!res.ok) throw new Error(`Error ${res.status} al llamar ${url}`);
       return res.json();
     },
-    { revalidateOnFocus: false }
+    {
+      revalidateOnFocus: false,
+      // Mantiene los datos anteriores mientras llega la respuesta nueva
+      // cuando cambia la key (ej. el filtro de período del detalle de
+      // organización) — sin esto, `isLoading` vuelve a `true` en cada
+      // cambio y la página entera parpadea a "Cargando…" en vez de
+      // actualizar solo el gráfico.
+      keepPreviousData: true,
+    }
   );
 }
