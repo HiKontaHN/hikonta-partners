@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { HiKontaIcon } from "@/components/shared/hikonta-icon";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { PageHeaderProvider, PageHeaderOutlet } from "@/components/partner/page-header-slot";
 import { cn } from "@/lib/utils";
 import { Lineicons } from "@lineiconshq/react-lineicons";
 import {
@@ -33,7 +34,7 @@ const NAV = [
 const SIDEBAR_COLLAPSED_KEY = "hikonta-partners:sidebar-collapsed";
 
 export default function PartnerLayout({ children }: { children: React.ReactNode }) {
-  const { me, loading, pending, bypassing, signOut } = useAuth();
+  const { me, loading, pending, signOut } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
   const [navOpen, setNavOpen] = useState(false);
@@ -201,73 +202,74 @@ export default function PartnerLayout({ children }: { children: React.ReactNode 
   }
 
   return (
-    <div className="flex h-svh overflow-hidden bg-background">
-      {/* ── Sidebar desktop: isla flotante, colapsable a rail de íconos ── */}
-      <aside
-        className={cn(
-          "hidden shrink-0 p-3 transition-[width] duration-200 ease-linear md:block",
-          collapsed ? "w-[88px]" : "w-64"
+    <PageHeaderProvider>
+      <div className="flex h-svh overflow-hidden bg-background">
+        {/* ── Sidebar desktop: isla flotante, colapsable a rail de íconos ── */}
+        <aside
+          className={cn(
+            "hidden shrink-0 p-3 transition-[width] duration-200 ease-linear md:block",
+            collapsed ? "w-[88px]" : "w-64"
+          )}
+        >
+          <div className="card-elevated flex h-full flex-col justify-between rounded-2xl bg-sidebar p-3">
+            {renderSidebarBody(collapsed, true)}
+          </div>
+        </aside>
+
+        {/* ── Sidebar mobile: drawer off-canvas, siempre expandido ────────── */}
+        {navOpen && (
+          <div
+            className="fixed inset-0 z-40 bg-black/40 md:hidden"
+            onClick={() => setNavOpen(false)}
+            aria-hidden
+          />
         )}
-      >
-        <div className="card-elevated flex h-full flex-col justify-between rounded-2xl bg-sidebar p-3">
-          {renderSidebarBody(collapsed, true)}
+        <aside
+          className={cn(
+            "fixed inset-y-0 left-0 z-50 flex w-72 max-w-[80vw] flex-col justify-between bg-sidebar p-4 shadow-2xl transition-transform duration-200 ease-out md:hidden",
+            navOpen ? "translate-x-0" : "-translate-x-full"
+          )}
+        >
+          {renderSidebarBody(false, false)}
+        </aside>
+
+        {/* Columna derecha: navbar y el header de página (si la ruta actual
+            registró uno con usePageHeader) quedan fijos (shrink-0, fuera del
+            scroll); solo <main> hace scroll — igual mecanismo que ya fija el
+            sidebar (contenedor raíz h-svh + overflow-hidden). gap-3 en vez de
+            mt-3 en cada uno: así el hueco es el mismo tenga la página un
+            header registrado o no (ver components/partner/page-header-slot). */}
+        <div className="flex min-w-0 flex-1 flex-col gap-3 overflow-hidden p-3 sm:p-4 md:pl-0">
+          {/* ── Navbar: isla flotante igual que el sidebar — rounded-2xl +
+              sombra, sin borde. Hamburguesa+logo en mobile, título de página
+              en desktop; el toggle de modo oscuro vive acá, no en el sidebar ── */}
+          <header className="card-elevated flex shrink-0 items-center gap-3 rounded-2xl bg-card px-4 py-3">
+            <button
+              onClick={() => setNavOpen((v) => !v)}
+              aria-label="Abrir menú"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted md:hidden"
+            >
+              <Lineicons icon={navOpen ? XmarkOutlined : MenuHamburger1Outlined} size={18} />
+            </button>
+            <div className="flex items-center gap-2 md:hidden">
+              <HiKontaIcon className="h-7 w-7" />
+              <span className="text-sm font-bold tracking-tight">HiKonta Partners</span>
+            </div>
+
+            <h1 className="hidden text-base font-bold tracking-tight md:block">{currentLabel}</h1>
+
+            <div className="ml-auto">
+              <ThemeToggle collapsed />
+            </div>
+          </header>
+
+          <PageHeaderOutlet />
+
+          <main className="min-h-0 flex-1 overflow-y-auto overflow-x-auto">
+            <div className="mx-auto max-w-6xl pb-3">{children}</div>
+          </main>
         </div>
-      </aside>
-
-      {/* ── Sidebar mobile: drawer off-canvas, siempre expandido ────────── */}
-      {navOpen && (
-        <div
-          className="fixed inset-0 z-40 bg-black/40 md:hidden"
-          onClick={() => setNavOpen(false)}
-          aria-hidden
-        />
-      )}
-      <aside
-        className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-72 max-w-[80vw] flex-col justify-between bg-sidebar p-4 shadow-2xl transition-transform duration-200 ease-out md:hidden",
-          navOpen ? "translate-x-0" : "-translate-x-full"
-        )}
-      >
-        {renderSidebarBody(false, false)}
-      </aside>
-
-      {/* Columna derecha: navbar + banner quedan fijos (shrink-0, fuera del
-          scroll); solo <main> hace scroll — igual mecanismo que ya fija el
-          sidebar (contenedor raíz h-svh + overflow-hidden). */}
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden p-3 sm:p-4 md:pl-0">
-        {/* ── Navbar: isla flotante igual que el sidebar — rounded-2xl +
-            sombra, sin borde. Hamburguesa+logo en mobile, título de página
-            en desktop; el toggle de modo oscuro vive acá, no en el sidebar ── */}
-        <header className="card-elevated flex shrink-0 items-center gap-3 rounded-2xl bg-card px-4 py-3">
-          <button
-            onClick={() => setNavOpen((v) => !v)}
-            aria-label="Abrir menú"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted md:hidden"
-          >
-            <Lineicons icon={navOpen ? XmarkOutlined : MenuHamburger1Outlined} size={18} />
-          </button>
-          <div className="flex items-center gap-2 md:hidden">
-            <HiKontaIcon className="h-7 w-7" />
-            <span className="text-sm font-bold tracking-tight">HiKonta Partners</span>
-          </div>
-
-          <h1 className="hidden text-base font-bold tracking-tight md:block">{currentLabel}</h1>
-
-          <div className="ml-auto">
-            <ThemeToggle collapsed />
-          </div>
-        </header>
-
-        {bypassing && (
-          <div className="mt-3 shrink-0 rounded-2xl bg-warning px-4 py-2 text-center text-xs font-bold text-warning-foreground">
-            ⚠️ Modo sin autenticación — el login está bypaseado (NEXT_PUBLIC_BYPASS_AUTH)
-          </div>
-        )}
-
-        <main className="mt-3 min-h-0 flex-1 overflow-y-auto overflow-x-auto">
-          <div className="mx-auto max-w-6xl pb-3">{children}</div>
-        </main>
       </div>
-    </div>
+    </PageHeaderProvider>
   );
 }

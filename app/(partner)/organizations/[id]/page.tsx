@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { usePartnerSWR } from "@/hooks/use-partner-swr";
+import { usePageHeader } from "@/components/partner/page-header-slot";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -103,10 +104,58 @@ export default function OrganizationDetailPage() {
     `/api/partner/organizations/${id}?period=${period}`
   );
   const [sponsorOpen, setSponsorOpen] = useState(false);
+  const org = data?.data;
+
+  // Header con la identidad de la org — registrado en el slot fijo del
+  // layout (ver components/partner/page-header-slot), NO `position:
+  // sticky`: eso seguiría viviendo dentro del contenedor con scroll y solo
+  // se "engancha" al tope al pasarlo. Este vive fuera del scroll desde el
+  // principio, igual que el navbar. Deps explícitas (no el JSX en sí, que
+  // sería una referencia nueva cada render) para no reescribir el slot en
+  // cada ciclo de render.
+  usePageHeader(
+    () =>
+      org ? (
+        <div className="card-elevated flex flex-wrap items-start justify-between gap-3 rounded-2xl bg-card px-4 py-4 sm:px-5">
+          <div className="flex items-center gap-3">
+            {org.logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={org.logoUrl} alt="" className="h-12 w-12 rounded-full object-cover" />
+            ) : (
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-chip-blue-bg text-lg font-extrabold text-chip-blue">
+                {org.name.charAt(0).toUpperCase()}
+              </div>
+            )}
+            <div>
+              <h1 className="text-xl font-semibold">{org.name}</h1>
+              <p className="text-sm text-muted-foreground">
+                {org.ownerName ?? org.ownerEmail ?? "Sin propietario asignado"}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {org.industryName && <Badge variant="muted">{org.industryName}</Badge>}
+            {org.planName && (
+              <Badge variant="muted">
+                <Lineicons icon={Crown3Outlined} size={12} />
+                {org.planName}
+              </Badge>
+            )}
+            <Badge variant={STATUS_VARIANT[org.status]}>{STATUS_LABEL[org.status]}</Badge>
+            <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => setSponsorOpen(true)}>
+              <Lineicons icon={Wallet1Outlined} size={13} />
+              Patrocinar meses
+            </Button>
+          </div>
+        </div>
+      ) : null,
+    [org?.id, org?.name, org?.logoUrl, org?.ownerName, org?.ownerEmail, org?.industryName, org?.planName, org?.status]
+  );
 
   if (isLoading) return <p className="text-sm text-muted-foreground">Cargando…</p>;
 
-  if (error || !data) {
+  if (error || !data || !org) {
     return (
       <div>
         <BackLink />
@@ -117,45 +166,9 @@ export default function OrganizationDetailPage() {
     );
   }
 
-  const org = data.data;
-
   return (
     <div>
       <BackLink />
-
-      <div className="mt-4 flex flex-wrap items-start justify-between gap-3">
-        <div className="flex items-center gap-3">
-          {org.logoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={org.logoUrl} alt="" className="h-12 w-12 rounded-full object-cover" />
-          ) : (
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-chip-blue-bg text-lg font-extrabold text-chip-blue">
-              {org.name.charAt(0).toUpperCase()}
-            </div>
-          )}
-          <div>
-            <h1 className="text-xl font-semibold">{org.name}</h1>
-            <p className="text-sm text-muted-foreground">
-              {org.ownerName ?? org.ownerEmail ?? "Sin propietario asignado"}
-            </p>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          {org.industryName && <Badge variant="muted">{org.industryName}</Badge>}
-          {org.planName && (
-            <Badge variant="muted">
-              <Lineicons icon={Crown3Outlined} size={12} />
-              {org.planName}
-            </Badge>
-          )}
-          <Badge variant={STATUS_VARIANT[org.status]}>{STATUS_LABEL[org.status]}</Badge>
-          <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => setSponsorOpen(true)}>
-            <Lineicons icon={Wallet1Outlined} size={13} />
-            Patrocinar meses
-          </Button>
-        </div>
-      </div>
 
       <ImpactBanner impact={org.impact} activityTrendPct={org.activityTrendPct} />
 

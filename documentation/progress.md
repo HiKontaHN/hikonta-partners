@@ -1,6 +1,7 @@
 # Estado del proyecto — HiKonta Partners
 
-> Última actualización: 19 de agosto de 2026
+> Última actualización: 19 de agosto de 2026 (tarde — incluye invites/impacto, créditos y
+> remoción de activity)
 
 ---
 
@@ -63,17 +64,22 @@ sobre el registro de HiKonta):
 app/api/partner/
   me/                       GET  — identidad del coordinador (o 403 + reason si está pendiente)
   register/                 POST — público, crea Firebase user + users + partners (is_active=FALSE)
-  dashboard/                GET  — KPIs del resumen + distribución por sector/industria
+  dashboard/                GET  — KPIs del resumen + distribución por sector/industria + impacto agregado
   organizations/            GET  — tabla de emprendedores del portafolio (incluye sector)
-  organizations/[id]/       GET  — detalle de una org (incluye sector)
-  subscriptions/            GET  — plan/estado/vencimiento de cada org del portafolio
+  organizations/[id]/       GET  — detalle de una org (incluye sector + impacto de actividad pre/post vínculo)
+  subscriptions/            GET  — plan/estado/vencimiento de cada org + resumen por estado + patrocinados activos
   subscriptions/payments/   GET  — historial de patrocinios que pagó ESTE partner (búsqueda + filtro + paginación)
+  credits/                  GET  — lotes de créditos de suscripción pre-comprados por el partner (solo lectura)
   plans/                    GET  — catálogo de planes activos
-  activity/                 GET  — actividad reciente (derivada de sales/transactions)
+  invites/                  GET  — lista de códigos de invitación generados por este partner
+  invites/                  POST — genera un código nuevo (expira, reintenta en colisión de UNIQUE)
+  invites/[id]/             DELETE — revoca un código
   reports/adoption/         GET  — % de adopción + reporte para terceros (beneficiarios, ventas generadas, sectores)
   reports/trends/           GET  — series mensuales (adopción + ingresos, 6 meses)
   sponsor/                  POST — partner patrocina N meses de plan a una org (rate-limited)
 ```
+
+`activity/` (GET) **ya no existe** — se eliminó junto con la vista `/activity` (ver sección 11).
 
 `lib/auth.ts` → `verifyPartner()` (análogo a `verifyAdmin()` del app principal).
 `lib/billing.ts` → `applySubscriptionPayment()` (aplica pagos/patrocinios a `org_subscriptions`).
@@ -99,12 +105,18 @@ app/
   login/                 login (Firebase email+password, toggle mostrar/ocultar)
   register/               registro de incubadora → queda pendiente de aprobación
   (partner)/              layout protegido — sidebar isla flotante colapsable + navbar isla flotante
-    dashboard/             5 KPIs
-    organizations/         tabla de emprendedores (propietario, ingresos, tendencia, status)
-    subscriptions/         plan/vencimiento de cada org — patrocinar meses + historial de patrocinios
-    activity/               feed de actividad
+    dashboard/             5 KPIs + impacto agregado del portafolio
+    organizations/         tabla de emprendedores (propietario, ingresos, tendencia, status) +
+                           botón "Agregar organización" (InviteModal)
+    organizations/[id]/    detalle de org — ahora incluye ImpactBanner (crecimiento de actividad
+                           pre/post vínculo) e income chart con profit además de income
+    subscriptions/         plan/vencimiento de cada org — stat cards por estado, "Patrocinados
+                           activamente", historial de patrocinios, y CreditsSection (créditos
+                           pre-comprados sin asignar)
     reports/                 reporte de adopción + tendencias
 ```
+
+`activity/` **ya no existe** — ver sección 11 (por qué se sacó y qué la reemplazó).
 
 - **Sidebar**: isla flotante (`rounded-2xl` + sombra, sin borde duro), colapsable a riel de íconos,
   estado persistido en `localStorage`. Drawer off-canvas en mobile.
@@ -151,17 +163,24 @@ entre al dominio vería el panel sin loguearse.
 
 ## 8. Pendiente
 
-- [ ] **Apagar el bypass de autenticación** antes de cualquier despliegue real
+- [ ] **Apagar el bypass de autenticación** antes de cualquier despliegue real — sigue activo
+      (`NEXT_PUBLIC_BYPASS_AUTH="true"` en `.env.local`, verificado 19 ago tarde)
 - [ ] UI de aprobación de partners nuevos (hoy es un `UPDATE partners SET is_active = TRUE` manual en Neon)
-- [ ] UI para vincular una org a un partner (hoy es un `INSERT` manual en `partner_organizations`)
+- [x] ~~UI para vincular una org a un partner~~ — resuelto vía invite codes, ver sección 11
+      (`INSERT` manual en `partner_organizations` sigue siendo un fallback válido, ya no es el único camino)
 - [x] UI para que el partner patrocinee meses — página `/subscriptions` (lista + modal `SponsorModal`, también embebido en `/organizations/[id]`), usa `POST /api/partner/sponsor` que ya existía
 - [x] Historial de patrocinios detallado — `/api/partner/subscriptions/payments` + sección en `/subscriptions`
 - [x] Distribución por sector/industria — dashboard + reporte para terceros
 - [x] Rate limiting (global + por endpoint sensible) — portado de `hikonta-admin`
 - [x] Fix de la condición de carrera del cookie de sesión en login/register — portado de `hikonta-admin`
+- [x] Flujo de invitación para agregar organizaciones al portafolio — ver sección 11
+- [x] Métricas de impacto (crecimiento de actividad pre/post vínculo) — dashboard + detalle de org
+- [x] Créditos de suscripción pre-comprados por el partner — `/api/partner/credits` + sección en `/subscriptions` (solo lectura, ver sección 11)
+- [x] Feed de actividad cronológico → reemplazado por stat cards de suscripciones (ver sección 11)
 - [ ] Email de confirmación/aprobación al registrarse (hoy no se envía nada)
 - [ ] Deploy real: proyecto en Vercel + dominio `partners.hikonta.com` + variables de entorno
 - [ ] `eslint.config.js` (no está configurado en este repo todavía)
+- [ ] Fase 2 de créditos: repartir cada crédito por link/email a alguien sin cuenta todavía (hoy `/api/partner/credits` es solo lectura — el lote lo arma un admin de HiKonta en `hikonta-admin`)
 - [ ] Exportar a Excel/PDF el reporte para terceros, alertas automáticas de inactividad (requiere cron — ver sección 10)
 - [ ] Cohortes/programas, mentores, empleo real, financiamiento — bloqueados por falta de tablas nuevas, ver `documentation/ideas-feasibility.md`
 - [ ] Fase 2/3 de KPIs: gráficos de tendencia histórica, retención a 90 días, benchmarking entre partners
@@ -207,6 +226,71 @@ Partner/Admin, o el fin de línea CRLF/LF).
 
 ⚠️ Importante: con `NEXT_PUBLIC_BYPASS_AUTH="true"` (ver sección 6), nada de `proxy.ts` se
 ejecuta — para probar estos fixes de verdad hay que apagar el bypass.
+
+---
+
+## 11. Últimos 3 commits (19 ago, tarde)
+
+### `42e32b3` — Flujo de invitación de organizaciones + métricas de impacto
+
+- **Pregunta abierta #6 de `partner-dashboard-architecture.md` resuelta**: hasta ahora vincular una
+  org al portafolio de un partner era un `INSERT` manual en `partner_organizations`. Ahora hay un
+  flujo de invitación por código:
+  - `database/partners/04-invite-codes.sql` (en `yelifin-sistema`) crea `partner_invite_codes`.
+  - `POST /api/partner/invites` genera un código de 8 caracteres (`lib/invite-codes.ts`), expira a
+    los `INVITE_CODE_DEFAULT_EXPIRY_DAYS` días, reintenta hasta 5 veces en colisión de `UNIQUE`.
+  - `GET /api/partner/invites` lista los códigos del partner con estado derivado
+    (`ACTIVE`/`USED`/`EXPIRED`/`REVOKED`); `DELETE /api/partner/invites/[id]` revoca uno.
+  - El **canje real** (crear el vínculo en `partner_organizations`) pasa del lado de
+    `yelifin-sistema` (`/api/auth/register?ref=CODIGO` o Configuración → Organización si ya tiene
+    cuenta) — este repo nunca escribe el vínculo directamente, mismo espíritu opt-in que
+    `share_financials`.
+  - UI: botón "Agregar organización" en `/organizations` → `InviteModal` (nuevo componente,
+    212 líneas) con el link listo para copiar/compartir.
+- **Métricas de impacto** (`lib/impact.ts`, nuevo): crecimiento de actividad (ventas +
+  transacciones, **sin montos** — a propósito, ver comentario en el archivo) comparando el
+  promedio mensual antes vs. después de `partner_organizations.linked_at`. Requiere ≥14 días de
+  historial "antes" para reportar un % (si no, `growthPct: null`, nunca se inventa un número); caso
+  especial `startedFromZero` cuando la org no tenía actividad antes de unirse y sí después.
+  - Usado en `GET /api/partner/organizations/[id]` (impacto de una org — nuevo `ImpactBanner` en
+    la página de detalle) y en `GET /api/partner/dashboard` (promedio agregado del portafolio,
+    misma fórmula para que los números sean consistentes entre vista agregada y detalle).
+- `income-trend-chart.tsx` ahora también grafica *profit* además de *income* (antes solo income).
+
+### `c14bb13` — Créditos de suscripción (UI + API)
+
+- **Créditos pre-comprados por el partner**: HiKonta le vende al partner lotes de meses de
+  suscripción por adelantado (`partner_credit_batches`, generados desde `hikonta-admin` —
+  `POST /api/admin/partners/[id]/credit-batches`, no desde este repo), que luego se reparten a
+  organizaciones (`partner_subscription_credits`). Ese reparto ("fase 2": link/email a alguien sin
+  cuenta) **no está construido** — ver `hikonta-admin/documentation/feature-sponsorship-invites.md`.
+- Este repo agrega **solo lectura**: `GET /api/partner/credits` — lista los lotes del partner con
+  plan, duración, cantidad, total pagado, y conteo de créditos `pending`/`claimed`/`revoked` por
+  lote (cast manual de `numeric` de Postgres a `Number`, mismo patrón que en
+  `subscriptions/payments`).
+- UI: `CreditsSection` nueva en `/subscriptions` — tabla, oculta si el partner no tiene lotes.
+
+### `ac6cf30` — Se saca el feed de actividad, entran stats de suscripciones
+
+- **`/activity` (página + `GET /api/partner/activity`) eliminados por completo.** Razón
+  (documentada también en `README.md`): quedaba redundante con el `ImpactBanner` del detalle de
+  organización (agregado en `42e32b3`, mismo día) — un feed cronológico sin contexto de tendencia
+  no aportaba nada encima de un % de crecimiento. Se sacó del menú del sidebar
+  (`app/(partner)/layout.tsx`).
+- `GET /api/partner/subscriptions` ahora devuelve además:
+  - `summary`: conteo de orgs por `subscriptionStatus` (`ACTIVE`/`TRIAL`/`PAST_DUE`/`CANCELLED`/
+    `EXPIRED`) sobre **todo** el portafolio, no solo la página paginada — para las stat cards.
+  - `activelySponsored`: orgs que este partner patrocinó (`paid_by_partner_id`, `months_purchased
+    > 0`) y cuya suscripción sigue `ACTIVE` hoy — subconjunto del historial completo de pagos, sin
+    paginar (es chico).
+- `/subscriptions` gana stat cards por estado + sección "Patrocinados activamente" +
+  `CreditsSection` (de `c14bb13`) — la página pasó de ser solo una tabla a un panel completo de
+  suscripciones/créditos/patrocinios.
+- Retoque menor de ícono/feature en la landing (`app/page.tsx`).
+
+⚠️ Con estos 3 commits, `documentation/dashboard.md` (el spec de KPIs original) queda un poco más
+atrás todavía de lo que ya estaba — impacto, créditos y las stat cards de suscripciones no estaban
+en ese doc. No se ha actualizado `dashboard.md` en consecuencia.
 
 ---
 
