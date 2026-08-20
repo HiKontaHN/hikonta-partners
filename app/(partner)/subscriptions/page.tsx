@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { StatCard } from "@/components/partner/stat-card";
 import { SponsorModal } from "@/components/partner/sponsor-modal";
+import { SectionSpinner } from "@/components/ui/spinner";
 import { formatDateShort } from "@/lib/utils";
 import { Lineicons } from "@lineiconshq/react-lineicons";
 import {
@@ -87,8 +88,10 @@ export default function SubscriptionsPage() {
 
   // Mismas keys que usan CreditsSection/PaymentHistorySection más abajo —
   // SWR las deduplica (un solo fetch de red), esto solo lee el resultado
-  // compartido para armar las stat cards de arriba.
-  const { data: creditsData } = usePartnerSWR<CreditsResponse>("/api/partner/credits");
+  // compartido para armar las stat cards de arriba. `mutateCredits` revalida
+  // esa key compartida (afecta también a CreditsSection) cuando un
+  // patrocinio consume un crédito.
+  const { data: creditsData, mutate: mutateCredits } = usePartnerSWR<CreditsResponse>("/api/partner/credits");
   const { data: paymentsData } = usePartnerSWR<PaymentsResponse>(
     "/api/partner/subscriptions/payments?search=&status=all&page=1"
   );
@@ -131,7 +134,7 @@ export default function SubscriptionsPage() {
         />
       </div>
 
-      {isLoading && <p className="text-sm text-muted-foreground">Cargando…</p>}
+      {isLoading && <SectionSpinner />}
 
       {data && data.data.length === 0 && (
         <p className="text-sm text-muted-foreground">
@@ -224,11 +227,11 @@ export default function SubscriptionsPage() {
           onClose={() => setSponsorTarget(null)}
           onSuccess={() => {
             mutate();
+            mutateCredits();
             setPaymentsRefreshKey((k) => k + 1);
           }}
           orgId={sponsorTarget.id}
           orgName={sponsorTarget.name}
-          currentPlanId={sponsorTarget.planId}
         />
       )}
 
@@ -258,7 +261,7 @@ function ActivelySponsoredSection({ orgs, isLoading }: { orgs: ActivelySponsored
       </p>
 
       {isLoading ? (
-        <p className="text-sm text-muted-foreground">Cargando…</p>
+        <SectionSpinner />
       ) : (
         <div className="card-elevated overflow-x-auto rounded-xl bg-card">
           <table className="w-full text-sm">
@@ -345,7 +348,7 @@ function CreditsSection() {
         )}
       </div>
 
-      {isLoading && <p className="text-sm text-muted-foreground">Cargando…</p>}
+      {isLoading && <SectionSpinner />}
 
       {data && data.data.length > 0 && (
         <div className="card-elevated overflow-x-auto rounded-xl bg-card">
@@ -506,7 +509,7 @@ function PaymentHistorySection() {
         </select>
       </div>
 
-      {isLoading && <p className="text-sm text-muted-foreground">Cargando…</p>}
+      {isLoading && <SectionSpinner />}
 
       {data && data.data.length === 0 && (
         <p className="text-sm text-muted-foreground">

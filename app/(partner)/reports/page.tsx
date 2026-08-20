@@ -5,6 +5,7 @@ import { StatCard } from "@/components/partner/stat-card";
 import { AdoptionTrendChart, type AdoptionMonth } from "@/components/partner/adoption-trend-chart";
 import { IncomeTrendChart } from "@/components/partner/income-trend-chart";
 import { Card } from "@/components/ui/card";
+import { PageSpinner } from "@/components/ui/spinner";
 import { formatCurrency } from "@/lib/utils";
 import { Lineicons } from "@lineiconshq/react-lineicons";
 import {
@@ -48,7 +49,7 @@ export default function ReportsPage() {
   const { data, isLoading } = usePartnerSWR<AdoptionResponse>("/api/partner/reports/adoption");
   const { data: trends, isLoading: trendsLoading } = usePartnerSWR<TrendsResponse>("/api/partner/reports/trends");
 
-  if (isLoading || !data) return <p className="text-sm text-muted-foreground">Cargando…</p>;
+  if (isLoading || !data) return <PageSpinner />;
 
   const r = data.data;
 

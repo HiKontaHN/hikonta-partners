@@ -1,7 +1,7 @@
 # Estado del proyecto — HiKonta Partners
 
-> Última actualización: 19 de agosto de 2026 (tarde — incluye invites/impacto, créditos y
-> remoción de activity)
+> Última actualización: 20 de agosto de 2026 — patrocinio ahora solo consume créditos ya
+> comprados (ver sección 12), header fijo de página (slot dedicado) y componente `Spinner`
 
 ---
 
@@ -31,7 +31,7 @@ y quién necesita seguimiento.
 | Sin tabla `activity_log` nueva | "Última actividad" se deriva de `MAX(sold_at)` en `sales` y `MAX(occurred_at)` en `transactions` — cero instrumentación nueva |
 | Ingresos **nunca** se exponen sin opt-in | `partner_organizations.share_financials` debe ser `TRUE` para que un endpoint calcule montos de una org |
 | Registro = solicitud, no acceso inmediato | `partners.is_active = FALSE` hasta aprobación manual — sin UI de aprobación todavía |
-| Patrocinio de meses = mismo mecanismo que un pago normal | `subscription_payments.paid_by_partner_id` seteado, vía `applySubscriptionPayment()` |
+| Patrocinio de meses = mismo mecanismo que un pago normal, pero SOLO desde un crédito ya pago | `subscription_payments.paid_by_partner_id` seteado, vía `applySubscriptionPayment()` — ya no acepta monto/plan/meses libres, ver sección 12 |
 | Sin shadcn/ui ni Radix | Panel chico, de solo lectura — `components/ui/` hecho a mano con Tailwind |
 | Iconos: Lineicons, no lucide-react | Pedido explícito — `@lineiconshq/react-lineicons` + `@lineiconshq/free-icons` |
 | Estilo visual: "One UI" (Samsung) | Radios grandes, sombras suaves en vez de bordes duros, sidebar/navbar como islas flotantes colapsables, modo oscuro real con `next-themes` |
@@ -76,7 +76,7 @@ app/api/partner/
   invites/[id]/             DELETE — revoca un código
   reports/adoption/         GET  — % de adopción + reporte para terceros (beneficiarios, ventas generadas, sectores)
   reports/trends/           GET  — series mensuales (adopción + ingresos, 6 meses)
-  sponsor/                  POST — partner patrocina N meses de plan a una org (rate-limited)
+  sponsor/                  POST — reclama un crédito PENDING de un lote propio y lo aplica a una org (rate-limited)
 ```
 
 `activity/` (GET) **ya no existe** — se eliminó junto con la vista `/activity` (ver sección 11).
@@ -177,6 +177,9 @@ entre al dominio vería el panel sin loguearse.
 - [x] Métricas de impacto (crecimiento de actividad pre/post vínculo) — dashboard + detalle de org
 - [x] Créditos de suscripción pre-comprados por el partner — `/api/partner/credits` + sección en `/subscriptions` (solo lectura, ver sección 11)
 - [x] Feed de actividad cronológico → reemplazado por stat cards de suscripciones (ver sección 11)
+- [x] Header de página fijo (no `position: sticky`) en `/organizations` y `/organizations/[id]` — slot dedicado en el layout, ver sección 12
+- [x] Componente `Spinner`/`PageSpinner`/`SectionSpinner` — reemplaza los "Cargando…" de texto, ver sección 12
+- [x] `POST /api/partner/sponsor` ahora SOLO consume créditos ya comprados (`{ orgId, batchId }`) — ver sección 12
 - [ ] Email de confirmación/aprobación al registrarse (hoy no se envía nada)
 - [ ] Deploy real: proyecto en Vercel + dominio `partners.hikonta.com` + variables de entorno
 - [ ] `eslint.config.js` (no está configurado en este repo todavía)
@@ -319,3 +322,110 @@ en esta sesión (lo demás ya estaba expuesto de antes — ventas, clientes, ale
 Lo marcado 🔴 en ese doc (cohortes, mentores, hitos, financiamiento, empleo real) sigue sin
 implementarse — requiere tablas nuevas y captura manual, no se deriva de nada que HiKonta registre
 hoy. Ver el doc para el detalle completo de qué falta y por qué.
+
+---
+
+## 12. Sesión del 20 de agosto — header fijo, spinner reusable, y patrocinio solo por créditos
+
+### Header de página "fijo" (no `position: sticky`)
+
+Pedido explícito: el header de identidad de `/organizations/[id]` (y luego también el de
+`/organizations`) tenía que quedar fijo de verdad al scrollear, no `sticky` — con `sticky` el
+elemento sigue viviendo DENTRO del contenedor con scroll y recién se "engancha" al tope al
+pasarlo por encima.
+
+Como el único contenedor con scroll (`<main>`) vive en el layout compartido
+(`app/(partner)/layout.tsx`), no en cada página, hizo falta un mecanismo para que una página
+empuje contenido a una zona fuera de ese scroll — nuevo `components/partner/page-header-slot.tsx`:
+
+- `PageHeaderProvider` — envuelve todo el layout, guarda "qué header está activo ahora" en un
+  `useState` + dos contextos (uno para el setter, otro para el valor — separados para que
+  cualquier punto del árbol pueda leer o escribir).
+- `PageHeaderOutlet` — se renderiza en el layout, entre el navbar y `<main>`, shrink-0, **fuera**
+  del `overflow-y-auto` — mismo mecanismo que ya usa el navbar para quedar fijo.
+- `usePageHeader(factory, deps)` — hook que una página llama para publicar su header ahí (como
+  `useMemo`, recalcula solo cuando cambian `deps`); se limpia solo al desmontar/cambiar de ruta.
+
+`(partner)/layout.tsx` cambió los `mt-3` sueltos entre navbar/main por `gap-3` en el contenedor
+de la columna derecha, así el espaciado es igual tenga la página un header registrado o no.
+
+Aplicado en:
+- `organizations/[id]/page.tsx` — logo/nombre/propietario + badges (sector, plan, estado) +
+  botón "Patrocinar meses". Deps: solo identidad (`org?.id`, `org?.name`, etc.) — el JSX en sí
+  NUNCA va como dep (sería una referencia nueva cada render y dispararía un loop).
+- `organizations/page.tsx` — título + botón "Agregar organización" + la barra de filtros
+  completa (búsqueda/estado/sector). Acá las deps SÍ incluyen `search`/`status`/`industry`
+  (inputs controlados, tienen que reflejar cada tecla).
+
+### Componente `Spinner` reusable
+
+`components/ui/spinner.tsx` — reemplaza todos los `<p>Cargando…</p>` de texto del panel:
+- `Spinner` — el círculo giratorio (el mismo que ya usaba el estado de "iniciando sesión" del
+  layout, centralizado).
+- `PageSpinner` — centra el spinner a la mitad del área de contenido (`min-h-[60vh]`) para la
+  carga inicial de una página completa (`dashboard`, `reports`, `organizations`,
+  `organizations/[id]`).
+- `SectionSpinner` — versión chica (`py-10`, sin `min-h`) para subsecciones que cuelgan debajo de
+  contenido que ya se ve (las 3 secciones de `/subscriptions`, la lista de códigos de
+  `InviteModal`) — un `PageSpinner` ahí habría dejado un hueco enorme.
+
+### `POST /api/partner/sponsor` — ahora SOLO consume créditos ya comprados
+
+Pedido explícito: "la parte de patrocinar se van a poder agregar solo de los créditos que tengan
+agregados" — se revisó `hikonta-admin` (`documentation/feature-sponsorship-invites.md` y
+`database/partners/05-credit-batches.sql` en `yelifin-sistema`) para entender el esquema de
+créditos antes de tocar nada.
+
+Antes: `SponsorModal` dejaba tipear meses/monto/plan libremente — cualquier partner podía
+"registrar" un patrocinio sin que hubiera ningún cargo real detrás. Ahora:
+
+- **Contrato de la API cambió**: `{ orgId, monthsPurchased, amountUsd, planId }` → `{ orgId,
+  batchId }`. El backend ya no confía en ningún monto/plan/meses que mande el cliente — todo sale
+  del crédito reclamado.
+- Reclama UN crédito `PENDING` del lote con un **UPDATE atómico con subquery** (no hace falta
+  transacción explícita ni `SELECT` previo):
+  ```sql
+  UPDATE partner_subscription_credits
+  SET status = 'CLAIMED', claimed_org_id = ${orgId}, claimed_at = NOW()
+  WHERE id = (
+    SELECT id FROM partner_subscription_credits
+    WHERE batch_id = ${batchId} AND partner_id = ${partnerId} AND status = 'PENDING'
+    ORDER BY id ASC LIMIT 1
+  )
+  RETURNING id, plan_id, months
+  ```
+  Race-safe en Postgres (READ COMMITTED): dos requests concurrentes por el mismo lote no pueden
+  reclamar la misma fila — la segunda relee la subquery bajo el lock de fila de la primera y ya
+  no la ve `PENDING`.
+- Con `credit.plan_id`/`credit.months` ya server-side (no del cliente), llama
+  `applySubscriptionPayment(orgId, credit.months, { amountUsd: 0, planId: credit.plan_id,
+  paidByPartnerId, providerPaymentId: "credit:<id>" })` — `amountUsd: 0` porque el cobro real ya
+  pasó al comprar el lote (fase 1 de `feature-sponsorship-invites.md`, resuelve la pregunta
+  abierta que dejó ese doc sobre "cómo reflejar el canje sin duplicar el cobro"); el
+  `providerPaymentId` deja trazabilidad de qué crédito se usó en `subscription_payments`.
+  - Si `applySubscriptionPayment` falla (ej. la org no tiene `org_subscriptions` todavía), el
+    crédito vuelve a `PENDING` — rollback manual, mismo criterio que el rollback de Firebase en
+    `POST /api/partner/register`.
+- `SponsorModal` (componente) ya no tiene campos de meses/monto/plan — carga
+  `GET /api/partner/credits`, filtra lotes con `pending_count > 0`, y el partner elige de cuál
+  lote asignar una plaza. Si no tiene ningún lote con plazas disponibles, muestra un mensaje
+  explicando que los lotes los factura HiKonta desde `hikonta-admin` (no hay autoservicio). Perdió
+  el prop `currentPlanId` (ya no hay selector de plan libre) — actualizado en los dos call sites
+  (`/organizations/[id]` y `/subscriptions`).
+- `/subscriptions`: `onSuccess` del modal ahora también revalida la key compartida de SWR
+  `/api/partner/credits` (antes solo revalidaba la lista de suscripciones y forzaba un remount
+  del historial de pagos) — si no, el conteo de "pendientes" de `CreditsSection` quedaba
+  desactualizado hasta el próximo refetch.
+- **Sigue pendiente** (fuera de alcance de hoy, no pedido): flujo para gente sin cuenta todavía
+  (link/email de invitación a un crédito puntual) — eso es la fase 2 de
+  `feature-sponsorship-invites.md`, con preguntas de producto sin resolver (ver ese doc). Lo de
+  hoy es la aplicación de un crédito a una org que YA existe en el portafolio, que es un caso más
+  chico y no tenía ninguna decisión pendiente.
+
+**Probado de punta a punta** contra la Neon real (`partner_id=1`, org de prueba `id=6`): se
+insertó un lote de prueba con 2 créditos `PENDING`, se reclamaron ambos vía `POST /sponsor`
+(bajando `pending_count` 2→1→0 y subiendo `claimed_count` en `GET /api/partner/credits`), se
+confirmó el 3er intento devolviendo 409 "No quedan créditos pendientes en ese lote", y que
+patrocinar una org fuera del portafolio devuelve 404 antes de tocar ningún crédito. Los datos de
+prueba se revirtieron después (lote/créditos/pagos de prueba borrados, `org_subscriptions` de la
+org 6 restaurado).

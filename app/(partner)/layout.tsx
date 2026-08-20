@@ -7,6 +7,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { HiKontaIcon } from "@/components/shared/hikonta-icon";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { PageHeaderProvider, PageHeaderOutlet } from "@/components/partner/page-header-slot";
+import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import { Lineicons } from "@lineiconshq/react-lineicons";
 import {
@@ -64,7 +65,7 @@ export default function PartnerLayout({ children }: { children: React.ReactNode 
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
-        <span className="h-6 w-6 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-primary" />
+        <Spinner size={24} />
       </div>
     );
   }

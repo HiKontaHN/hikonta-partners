@@ -6,6 +6,7 @@ import { usePartnerSWR } from "@/hooks/use-partner-swr";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { SectionSpinner } from "@/components/ui/spinner";
 import { formatDateShort } from "@/lib/utils";
 import { Lineicons } from "@lineiconshq/react-lineicons";
 import { XmarkOutlined } from "@lineiconshq/free-icons";
@@ -164,7 +165,7 @@ export function InviteModal({ open, onClose }: { open: boolean; onClose: () => v
         <div className="flex flex-col gap-1">
           <p className="text-xs font-semibold text-muted-foreground">Códigos generados</p>
           {isLoading ? (
-            <p className="py-3 text-sm text-muted-foreground">Cargando…</p>
+            <SectionSpinner className="py-3" />
           ) : codes.length === 0 ? (
             <p className="py-3 text-sm text-muted-foreground">Todavía no generaste ningún código.</p>
           ) : (

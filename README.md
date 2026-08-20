@@ -91,11 +91,11 @@ app/
     subscriptions/            lista de suscripciones por org (plan, estado, vencimiento) +
                               resumen por estado + orgs patrocinadas activamente
     subscriptions/payments/   historial de patrocinios pagados por este partner
-    plans/                    catálogo de planes activos (para el selector de patrocinio)
-    credits/                  lotes de créditos de suscripción sin asignar
+    plans/                    catálogo de planes activos (ya no lo usa SponsorModal, ver abajo)
+    credits/                  lotes de créditos de suscripción — pendientes/asignados por lote
     reports/adoption/         % de adopción
     reports/trends/           series mensuales (adopción + ingresos, 6 meses)
-    sponsor/                  POST — partner patrocina N meses de plan a una org
+    sponsor/                  POST — reclama un crédito PENDING de un lote propio y lo aplica a una org
     invites/                  GET lista + POST genera código de invitación; [id] DELETE cancela
 lib/
   auth.ts                     verifyPartner() — análogo a verifyAdmin() del app principal
@@ -113,8 +113,20 @@ proxy.ts                      middleware (convención Next 16) — protege /(par
 - **Ingresos/costos nunca se exponen sin opt-in.** `partner_organizations.share_financials` debe
   ser `TRUE` para que un endpoint calcule montos de una org — no implementado aún en las rutas de
   este MVP (todas evitan `SUM`/`amount` por ahora).
-- **Patrocinio de meses = mismo mecanismo que un pago normal.** `subscription_payments` con
-  `paid_by_partner_id` seteado, vía `applySubscriptionPayment()`.
+- **Patrocinio de meses = mismo mecanismo que un pago normal, pero SOLO desde un crédito ya
+  pago.** `POST /api/partner/sponsor` ya no acepta meses/monto/plan libres — eso permitía
+  "inventar" un patrocinio sin ningún cargo real detrás. Ahora recibe `{ orgId, batchId }`:
+  reclama un crédito `PENDING` de `partner_subscription_credits` (UPDATE atómico con subquery,
+  sin transacción explícita — dos requests concurrentes no pueden reclamar la misma fila), y
+  recién con esos datos (plan, meses) llama `applySubscriptionPayment()` con `amountUsd: 0`
+  (ya se cobró al comprar el lote) y `paidByPartnerId` seteado — `providerPaymentId:
+  "credit:<id>"` deja trazabilidad de qué crédito se usó. Si `applySubscriptionPayment()` falla,
+  el crédito vuelve a `PENDING` (rollback manual, mismo criterio que `/api/partner/register`
+  con el usuario de Firebase). Los lotes los factura un admin de HiKonta desde `hikonta-admin`
+  (`POST /api/admin/partners/[id]/credit-batches`) — acá solo se consumen, nunca se crean. Ver
+  `hikonta-admin/documentation/feature-sponsorship-invites.md` para el diseño completo (créditos
+  como "facturación anticipada"; el link/email de invitación a gente sin cuenta sigue siendo fase
+  2, no construida).
 - **Registro = solicitud, no acceso inmediato.** `POST /api/partner/register` crea todo
   (Firebase user + `users` + `partners`) pero con `partners.is_active = FALSE`. El coordinador
   puede loguearse de inmediato, pero `verifyPartner()` sigue negando acceso (403,

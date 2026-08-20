@@ -6,6 +6,7 @@ import { usePartnerSWR } from "@/hooks/use-partner-swr";
 import { useDebounce } from "@/hooks/use-debounce";
 import { usePageHeader } from "@/components/partner/page-header-slot";
 import { Badge } from "@/components/ui/badge";
+import { PageSpinner } from "@/components/ui/spinner";
 import { Button } from "@/components/ui/button";
 import { InviteModal } from "@/components/partner/invite-modal";
 import { formatCurrency, formatDateShort } from "@/lib/utils";
@@ -157,7 +158,7 @@ export default function OrganizationsPage() {
 
   return (
     <div>
-      {isLoading && <p className="text-sm text-muted-foreground">Cargando…</p>}
+      {isLoading && <PageSpinner />}
 
       {data && data.data.length === 0 && (
         <p className="text-sm text-muted-foreground">

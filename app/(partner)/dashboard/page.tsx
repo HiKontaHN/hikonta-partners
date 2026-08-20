@@ -4,6 +4,7 @@ import { usePartnerSWR } from "@/hooks/use-partner-swr";
 import { StatCard } from "@/components/partner/stat-card";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { PageSpinner } from "@/components/ui/spinner";
 import { formatCurrency } from "@/lib/utils";
 import { Lineicons } from "@lineiconshq/react-lineicons";
 import {
@@ -56,7 +57,7 @@ function adoptionStatus(rate: number) {
 export default function DashboardPage() {
   const { data, isLoading } = usePartnerSWR<DashboardResponse>("/api/partner/dashboard");
 
-  if (isLoading || !data) return <p className="text-sm text-muted-foreground">Cargando…</p>;
+  if (isLoading || !data) return <PageSpinner />;
 
   const { summary, sectorBreakdown, partner, lastUpdated } = data.data;
   const adoption = adoptionStatus(summary.adoptionRate);

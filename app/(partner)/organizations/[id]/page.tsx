@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import { usePartnerSWR } from "@/hooks/use-partner-swr";
 import { usePageHeader } from "@/components/partner/page-header-slot";
 import { Card } from "@/components/ui/card";
+import { PageSpinner } from "@/components/ui/spinner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { SponsorModal } from "@/components/partner/sponsor-modal";
@@ -153,7 +154,7 @@ export default function OrganizationDetailPage() {
     [org?.id, org?.name, org?.logoUrl, org?.ownerName, org?.ownerEmail, org?.industryName, org?.planName, org?.status]
   );
 
-  if (isLoading) return <p className="text-sm text-muted-foreground">Cargando…</p>;
+  if (isLoading) return <PageSpinner />;
 
   if (error || !data || !org) {
     return (
@@ -319,7 +320,6 @@ export default function OrganizationDetailPage() {
         onSuccess={() => mutate()}
         orgId={org.id}
         orgName={org.name}
-        currentPlanId={org.planId}
       />
     </div>
   );
