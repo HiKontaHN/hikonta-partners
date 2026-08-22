@@ -1,6 +1,8 @@
 import { NextRequest } from "next/server";
 import { verifyPartner, createErrorResponse, isAuthSuccess } from "@/lib/auth";
 import { sql } from "@/lib/db";
+import { resolvePeriod } from "@/lib/periods";
+import { pctChange } from "@/lib/growth";
 
 // Mismos umbrales que /api/partner/dashboard — ver documentation/dashboard.md.
 const ACTIVE_DAYS = 30;
@@ -22,6 +24,8 @@ export async function GET(request: NextRequest) {
     const limit = 12;
     const offset = (page - 1) * limit;
     const searchPattern = `%${search}%`;
+    // Mes/año de las columnas "este mes" — ?year=&month=, ver lib/periods.ts.
+    const { year, month, periodStart } = resolvePeriod(searchParams);
 
     // `status` se deriva de last_activity_at igual que en el dashboard, pero
     // acá hace falta calcularlo EN SQL (no en JS después de traer la fila)
@@ -33,18 +37,17 @@ export async function GET(request: NextRequest) {
       WITH portfolio AS (
         SELECT
           o.id, o.name, o.logo_url, o.created_at, o.industry_id,
-          po.share_financials,
           u.display_name AS owner_name,
           u.email        AS owner_email,
           i.name          AS industry_name,
           os.status       AS subscription_status,
           sp.name         AS plan_name,
           (SELECT COUNT(*) FROM sales s WHERE s.org_id = o.id
-             AND DATE_TRUNC('month', s.sold_at) = DATE_TRUNC('month', NOW())) AS sales_this_month,
+             AND DATE_TRUNC('month', s.sold_at) = DATE_TRUNC('month', ${periodStart}::date)) AS sales_this_month,
           (SELECT COALESCE(SUM(total), 0) FROM sales s WHERE s.org_id = o.id
-             AND DATE_TRUNC('month', s.sold_at) = DATE_TRUNC('month', NOW())) AS income_this_month,
+             AND DATE_TRUNC('month', s.sold_at) = DATE_TRUNC('month', ${periodStart}::date)) AS income_this_month,
           (SELECT COALESCE(SUM(total), 0) FROM sales s WHERE s.org_id = o.id
-             AND DATE_TRUNC('month', s.sold_at) = DATE_TRUNC('month', NOW() - INTERVAL '1 month')) AS income_last_month,
+             AND DATE_TRUNC('month', s.sold_at) = DATE_TRUNC('month', ${periodStart}::date - INTERVAL '1 month')) AS income_last_month,
           GREATEST(
             COALESCE((SELECT MAX(sold_at)     FROM sales        WHERE org_id = o.id), o.created_at),
             COALESCE((SELECT MAX(occurred_at) FROM transactions WHERE org_id = o.id), o.created_at)
@@ -113,10 +116,8 @@ export async function GET(request: NextRequest) {
 
     const data = (orgs as any[]).map((o) => {
       const daysActive = Math.floor((Date.now() - new Date(o.created_at).getTime()) / 86_400_000);
-      const shareFinancials = o.share_financials === true;
       const incomeThisMonth = Number(o.income_this_month);
       const incomeLastMonth = Number(o.income_last_month);
-      const trendPct = incomeLastMonth > 0 ? ((incomeThisMonth - incomeLastMonth) / incomeLastMonth) * 100 : null;
 
       return {
         id: o.id,
@@ -133,17 +134,17 @@ export async function GET(request: NextRequest) {
         salesThisMonth: Number(o.sales_this_month),
         lastActivityAt: o.last_activity_at,
         status: o.status as "ACTIVE" | "INACTIVE" | "DORMANT",
-        // Ingresos/tendencia: null si la org no autorizó compartir montos —
-        // el cliente muestra "—", nunca inventa un valor.
-        shareFinancials,
-        incomeThisMonth: shareFinancials ? incomeThisMonth : null,
-        incomeTrendPct: shareFinancials && trendPct !== null ? Number(trendPct.toFixed(1)) : null,
+        // Nunca se expone el monto (ver política de ética de datos
+        // financieros, documentation/dashboard.md) — se calcula sobre el
+        // valor real de ingresos de la org, pero solo sale el %. null si no
+        // hay mes anterior con datos para comparar (nunca se inventa un %).
+        incomeTrendPct: pctChange(incomeThisMonth, incomeLastMonth),
       };
     });
 
-    return Response.json({ data, total, page, pages: Math.ceil(total / limit) });
+    return Response.json({ data, total, page, pages: Math.ceil(total / limit), period: { year, month } });
   } catch (error) {
     console.error("GET /api/partner/organizations:", error);
-    return createErrorResponse("Error al obtener organizaciones", 500);
+    return createErrorResponse("Error al obtener emprendedores", 500);
   }
 }

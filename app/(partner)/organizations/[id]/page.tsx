@@ -1,19 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { usePartnerSWR } from "@/hooks/use-partner-swr";
 import { usePageHeader } from "@/components/partner/page-header-slot";
+import { PeriodPicker, MONTH_LABELS, pickDefaultPeriod, type AvailablePeriod } from "@/components/partner/period-picker";
 import { Card } from "@/components/ui/card";
 import { PageSpinner } from "@/components/ui/spinner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Select } from "@/components/ui/select";
 import { SponsorModal } from "@/components/partner/sponsor-modal";
 import { StatCard } from "@/components/partner/stat-card";
 import { WeeklyTransactionsChart, type WeeklyTransactions } from "@/components/partner/weekly-transactions-chart";
 import { IncomeTrendChart } from "@/components/partner/income-trend-chart";
-import { formatCurrency, formatDate, formatDateShort } from "@/lib/utils";
+import { formatDate, formatDateShort } from "@/lib/utils";
 import { Lineicons } from "@lineiconshq/react-lineicons";
 import {
   ArrowLeftOutlined,
@@ -35,7 +37,6 @@ type OrgDetail = {
   createdAt: string;
   timezone: string;
   currency: string;
-  shareFinancials: boolean;
   linkedAt: string;
   ownerName: string | null;
   ownerEmail: string | null;
@@ -46,6 +47,9 @@ type OrgDetail = {
   planName: string | null;
   lastActivityAt: string;
   status: "ACTIVE" | "INACTIVE" | "DORMANT";
+  // Mes/año que se usó para las stat cards "del mes" de abajo — ver
+  // statsPeriod en /api/partner/organizations/[id].
+  statsPeriod: AvailablePeriod;
   counts: {
     totalSales: number;
     totalProducts: number;
@@ -62,34 +66,31 @@ type OrgDetail = {
     startedFromZero: boolean;
   };
   activityTrendPct: number | null;
-  // Gráfico de ingresos/ganancias — SIEMPRE viene, sin importar
-  // shareFinancials. mode "amount" trae montos reales, "percent" trae solo
-  // % de variación entre períodos (nunca un monto) — ver
-  // /api/partner/organizations/[id].
+  // Gráfico de ingresos/ganancias — SIEMPRE en modo "percent": solo % de
+  // variación entre períodos, nunca un monto (ver política de ética de
+  // datos financieros, documentation/dashboard.md).
   financialChart: {
-    mode: "amount" | "percent";
+    mode: "percent";
     granularity: "month" | "day";
     points: { period: string; income: number | null; profit: number | null }[];
   };
-  incomeThisMonth: number | null;
   incomeTrendPct: number | null;
-  profitThisMonth: number | null;
   profitTrendPct: number | null;
   recentSales: {
     id: number;
     saleNumber: string | null;
     soldAt: string;
     status: string | null;
-    total: number | null;
   }[];
 };
 
 type OrgDetailResponse = { data: OrgDetail };
+type PeriodsResponse = { data: AvailablePeriod[] };
 
 const STATUS_LABEL: Record<OrgDetail["status"], string> = {
   ACTIVE: "Activo",
-  INACTIVE: "Inactivo",
-  DORMANT: "Dormant",
+  INACTIVE: "En riesgo",
+  DORMANT: "Inactivos",
 };
 
 const STATUS_VARIANT: Record<OrgDetail["status"], "success" | "warning" | "muted"> = {
@@ -101,11 +102,26 @@ const STATUS_VARIANT: Record<OrgDetail["status"], "success" | "warning" | "muted
 export default function OrganizationDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [period, setPeriod] = useState("12m");
-  const { data, isLoading, isValidating, error, mutate } = usePartnerSWR<OrgDetailResponse>(
-    `/api/partner/organizations/${id}?period=${period}`
-  );
+
+  // Filtro de mes/año de las stat cards "del mes" (ventas, ingresos,
+  // ganancias) — distinto de `period` de arriba, que es el rango del
+  // gráfico de tendencia. Solo ofrece meses donde ESTE emprendedor tiene
+  // registros (no todo el portafolio, a diferencia del dashboard/lista).
+  const { data: periodsData } = usePartnerSWR<PeriodsResponse>(`/api/partner/organizations/${id}/periods`);
+  const periods = periodsData?.data ?? [];
+  const [statsPeriod, setStatsPeriod] = useState<AvailablePeriod | null>(null);
+  useEffect(() => {
+    if (statsPeriod || periods.length === 0) return;
+    setStatsPeriod(pickDefaultPeriod(periods));
+  }, [periods, statsPeriod]);
+
+  const detailUrl = `/api/partner/organizations/${id}?period=${period}${
+    statsPeriod ? `&year=${statsPeriod.year}&month=${statsPeriod.month}` : ""
+  }`;
+  const { data, isLoading, isValidating, error, mutate } = usePartnerSWR<OrgDetailResponse>(detailUrl);
   const [sponsorOpen, setSponsorOpen] = useState(false);
   const org = data?.data;
+  const statsPeriodLabel = org ? `${MONTH_LABELS[org.statsPeriod.month - 1]} ${org.statsPeriod.year}` : "";
 
   // Header con la identidad de la org — registrado en el slot fijo del
   // layout (ver components/partner/page-header-slot), NO `position:
@@ -161,7 +177,7 @@ export default function OrganizationDetailPage() {
       <div>
         <BackLink />
         <p className="mt-4 text-sm text-muted-foreground">
-          No se pudo cargar esta organización — puede que no esté en tu portafolio.
+          No se pudo cargar este emprendedor — puede que no esté en tu portafolio.
         </p>
       </div>
     );
@@ -173,11 +189,19 @@ export default function OrganizationDetailPage() {
 
       <ImpactBanner impact={org.impact} activityTrendPct={org.activityTrendPct} />
 
-      <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-6 flex items-center justify-between gap-3">
+        <p className="text-sm font-medium text-muted-foreground">Estadísticas del mes</p>
+        {periods.length > 0 && (
+          <PeriodPicker periods={periods} value={statsPeriod ?? periods[0]} onChange={setStatsPeriod} />
+        )}
+      </div>
+
+      <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard title="Ventas totales" value={org.counts.totalSales} icon={Cart1Outlined} tone="blue" />
         <StatCard
-          title="Ventas este mes"
+          title="Ventas del mes"
           value={org.counts.salesThisMonth}
+          subtitle={statsPeriodLabel}
           icon={Cart1Outlined}
           tone="purple"
         />
@@ -195,24 +219,26 @@ export default function OrganizationDetailPage() {
         />
       </div>
 
-      {org.shareFinancials && (
-        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <StatCard
-            title="Ingresos este mes"
-            value={formatCurrency(org.incomeThisMonth ?? 0)}
-            icon={DollarCircleOutlined}
-            tone="blue"
-            badge={<TrendBadge pct={org.incomeTrendPct} />}
-          />
-          <StatCard
-            title="Ganancias este mes"
-            value={formatCurrency(org.profitThisMonth ?? 0)}
-            icon={Wallet1Outlined}
-            tone="green"
-            badge={<TrendBadge pct={org.profitTrendPct} />}
-          />
-        </div>
-      )}
+      {/* Nunca se muestra el monto (ver política de ética de datos
+          financieros) — solo el % de variación vs el mes anterior,
+          calculado sobre el valor real de la org. Por eso ya no está
+          gateado por shareFinancials: siempre se puede mostrar un %. */}
+      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <StatCard
+          title="Crecimiento en ingresos"
+          value={org.incomeTrendPct !== null ? `${org.incomeTrendPct >= 0 ? "+" : ""}${org.incomeTrendPct}%` : "—"}
+          subtitle={`${statsPeriodLabel} vs mes anterior`}
+          icon={DollarCircleOutlined}
+          tone="blue"
+        />
+        <StatCard
+          title="Crecimiento en ganancia"
+          value={org.profitTrendPct !== null ? `${org.profitTrendPct >= 0 ? "+" : ""}${org.profitTrendPct}%` : "—"}
+          subtitle={`${statsPeriodLabel} vs mes anterior`}
+          icon={Wallet1Outlined}
+          tone="green"
+        />
+      </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <WeeklyTransactionsChart weeks={org.weeklyTransactions} />
@@ -221,14 +247,12 @@ export default function OrganizationDetailPage() {
           <div className="flex justify-end">
             <PeriodSelect value={period} onChange={setPeriod} />
           </div>
-          {/* Este gráfico SIEMPRE se muestra — si la org no autorizó
-              compartir montos (share_financials), la API ya viene en modo
-              "percent" (solo % de variación entre períodos, nunca un
-              monto), así que acá no hace falta ningún gate. opacity baja
-              mientras se revalida el nuevo período — evita el parpadeo de
-              "Cargando…" de página completa (keepPreviousData en
-              usePartnerSWR mantiene el gráfico anterior visible mientras
-              tanto). */}
+          {/* Este gráfico siempre viene en modo "percent" — nunca un monto,
+              solo % de variación entre períodos (ver política de ética de
+              datos financieros). opacity baja mientras se revalida el
+              nuevo período — evita el parpadeo de "Cargando…" de página
+              completa (keepPreviousData en usePartnerSWR mantiene el
+              gráfico anterior visible mientras tanto). */}
           <div className={isValidating ? "opacity-60 transition-opacity" : "transition-opacity"}>
             <IncomeTrendChart
               months={org.financialChart.points.map((p) => ({
@@ -239,11 +263,7 @@ export default function OrganizationDetailPage() {
               mode={org.financialChart.mode}
               granularity={org.financialChart.granularity}
               showProfit
-              note={
-                org.financialChart.mode === "percent"
-                  ? "Este emprendedor no autorizó compartir montos — se muestra la variación % entre períodos."
-                  : undefined
-              }
+              note="Por política de privacidad se muestra la variación % entre períodos, nunca montos."
             />
           </div>
         </div>
@@ -263,7 +283,6 @@ export default function OrganizationDetailPage() {
                   <th className="px-5 py-2 font-semibold">Venta</th>
                   <th className="px-5 py-2 font-semibold">Fecha</th>
                   <th className="px-5 py-2 font-semibold">Estado</th>
-                  <th className="px-5 py-2 font-semibold">Monto</th>
                 </tr>
               </thead>
               <tbody>
@@ -272,13 +291,6 @@ export default function OrganizationDetailPage() {
                     <td className="px-5 py-2.5 font-semibold">{sale.saleNumber ?? `#${sale.id}`}</td>
                     <td className="px-5 py-2.5 text-muted-foreground">{formatDateShort(sale.soldAt)}</td>
                     <td className="px-5 py-2.5 text-muted-foreground capitalize">{sale.status ?? "—"}</td>
-                    <td className="px-5 py-2.5">
-                      {sale.total !== null ? (
-                        formatCurrency(sale.total)
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -395,19 +407,7 @@ const PERIOD_OPTIONS: { value: string; label: string }[] = [
 ];
 
 function PeriodSelect({ value, onChange }: { value: string; onChange: (value: string) => void }) {
-  return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="rounded-full border-0 bg-muted px-3 py-1.5 text-xs font-semibold outline-none ring-1 ring-transparent focus:ring-2 focus:ring-ring"
-    >
-      {PERIOD_OPTIONS.map((o) => (
-        <option key={o.value} value={o.value}>
-          {o.label}
-        </option>
-      ))}
-    </select>
-  );
+  return <Select value={value} onChange={onChange} options={PERIOD_OPTIONS} />;
 }
 
 function BackLink() {

@@ -57,10 +57,11 @@ arquitectura real de HiKonta con estas desviaciones deliberadas del doc original
   muestra como "última actividad" (derivada de `sales`/`transactions`, igual que el resto del panel).
 - **Status de 3 niveles** (`ACTIVE` ≤30d, `INACTIVE` 30-90d, `DORMANT` >90d) implementado en
   `/api/partner/dashboard` y `/api/partner/organizations`.
-- **Ingresos siguen gateados por `share_financials`** — el doc pide mostrar ingresos libremente;
-  se mantiene el opt-in por privacidad (ver `partner-dashboard-architecture.md`), pero ya está
-  cableado de verdad: suma real de `sales.total` solo de las orgs que autorizaron, con tendencia
-  vs. mes anterior. El resumen deja explícito cuántas orgs están incluidas en la suma.
+- **Ingresos/ganancias nunca se muestran como monto, en ningún lado del panel (2026-08-21).**
+  `partner_organizations.share_financials` ya NO gatea nada — se calcula sobre el valor real de
+  ingresos/ganancia de TODAS las orgs del portafolio (sin opt-in), pero el partner solo ve el %
+  de variación, un ranking o un badge (nunca `formatCurrency`). Ver `lib/growth.ts` y el
+  comentario "política de ética de datos financieros" repetido en cada endpoint que toca montos.
 - **"Volumen de transacciones"** se muestra sin gate — es un conteo, no revela montos.
 - **Fase 2/3 del doc** (gráficos de tendencia históricos, retención a 90 días, benchmarking entre
   partners) — no implementado todavía, el propio doc los marca como no-MVP.
@@ -110,9 +111,10 @@ proxy.ts                      middleware (convención Next 16) — protege /(par
   (puede tener varios usuarios), no un `users` row.
 - **Sin tabla `activity_log` nueva.** "Última actividad" se deriva de `MAX(sold_at)` en `sales` y
   `MAX(occurred_at)` en `transactions`, filtrado por `org_id` — cero instrumentación nueva.
-- **Ingresos/costos nunca se exponen sin opt-in.** `partner_organizations.share_financials` debe
-  ser `TRUE` para que un endpoint calcule montos de una org — no implementado aún en las rutas de
-  este MVP (todas evitan `SUM`/`amount` por ahora).
+- **Ingresos/costos nunca se exponen como monto, punto — no es un tema de opt-in.** Los endpoints
+  SÍ calculan `SUM`/`amount` reales (de todas las orgs, hayan o no marcado `share_financials`),
+  pero esos montos nunca salen del backend: cada respuesta solo expone %, rankings o badges. Ver
+  `lib/growth.ts` y el KPI "Crecimiento en base a ingresos" del dashboard.
 - **Patrocinio de meses = mismo mecanismo que un pago normal, pero SOLO desde un crédito ya
   pago.** `POST /api/partner/sponsor` ya no acepta meses/monto/plan libres — eso permitía
   "inventar" un patrocinio sin ningún cargo real detrás. Ahora recibe `{ orgId, batchId }`:

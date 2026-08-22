@@ -131,7 +131,7 @@ export async function requireOwnedOrganization(
   const [link] = await sql`
     SELECT 1 FROM partner_organizations WHERE partner_id = ${partnerId} AND org_id = ${orgId}
   `;
-  if (!link) return createErrorResponse("Organización no encontrada en tu portafolio", 404);
+  if (!link) return createErrorResponse("Emprendedor no encontrado en tu portafolio", 404);
   return null;
 }
 

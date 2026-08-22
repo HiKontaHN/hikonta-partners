@@ -6,6 +6,7 @@ import { usePartnerSWR } from "@/hooks/use-partner-swr";
 import { useDebounce } from "@/hooks/use-debounce";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Select } from "@/components/ui/select";
 import { StatCard } from "@/components/partner/stat-card";
 import { SponsorModal } from "@/components/partner/sponsor-modal";
 import { SectionSpinner } from "@/components/ui/spinner";
@@ -138,7 +139,7 @@ export default function SubscriptionsPage() {
 
       {data && data.data.length === 0 && (
         <p className="text-sm text-muted-foreground">
-          Todavía no hay organizaciones vinculadas a tu portafolio.
+          Todavía no hay emprendedores vinculados a tu portafolio.
         </p>
       )}
 
@@ -255,7 +256,7 @@ function ActivelySponsoredSection({ orgs, isLoading }: { orgs: ActivelySponsored
 
   return (
     <div className="mt-10">
-      <h2 className="mb-1 text-lg font-semibold">Organizaciones que estás patrocinando activamente</h2>
+      <h2 className="mb-1 text-lg font-semibold">Emprendedores que estás patrocinando activamente</h2>
       <p className="mb-4 text-sm text-muted-foreground">
         Suscripción activa hoy, con al menos un mes pagado por vos.
       </p>
@@ -496,17 +497,15 @@ function PaymentHistorySection() {
             className={`${INPUT_CLASS} w-full pl-10`}
           />
         </div>
-        <select
+        <Select
           value={status}
-          onChange={(e) => handleStatus(e.target.value)}
-          className={`${INPUT_CLASS} sm:w-44`}
-        >
-          <option value="all">Todos los estados</option>
-          <option value="PAID">Pagado</option>
-          <option value="PENDING">Pendiente</option>
-          <option value="FAILED">Fallido</option>
-          <option value="REFUNDED">Reembolsado</option>
-        </select>
+          onChange={handleStatus}
+          className="sm:w-44"
+          options={[
+            { value: "all", label: "Todos los estados" },
+            ...Object.entries(PAYMENT_STATUS_LABEL).map(([value, label]) => ({ value, label })),
+          ]}
+        />
       </div>
 
       {isLoading && <SectionSpinner />}

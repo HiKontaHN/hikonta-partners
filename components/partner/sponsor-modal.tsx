@@ -5,6 +5,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { usePartnerSWR } from "@/hooks/use-partner-swr";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
+import { Select } from "@/components/ui/select";
 import { Spinner, SectionSpinner } from "@/components/ui/spinner";
 
 // Un lote (batch) de créditos de suscripción — ver GET /api/partner/credits.
@@ -21,9 +22,6 @@ type CreditBatchRow = {
 };
 
 type CreditsResponse = { data: CreditBatchRow[] };
-
-const INPUT_CLASS =
-  "rounded-full border-0 bg-muted px-4 py-2.5 text-sm outline-none ring-1 ring-transparent focus:ring-2 focus:ring-ring";
 
 export function SponsorModal({
   open,
@@ -119,25 +117,18 @@ export function SponsorModal({
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <label className="flex flex-col gap-1.5 text-sm">
             <span className="font-semibold text-muted-foreground">Crédito a usar</span>
-            <select
+            <Select
               value={batchId}
-              onChange={(e) => setBatchId(e.target.value)}
-              className={INPUT_CLASS}
-              required
-            >
-              <option value="" disabled>
-                Elegí un lote…
-              </option>
-              {availableBatches.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.plan_name} — {b.months} mes{b.months === 1 ? "" : "es"} ({b.pending_count} disponible
-                  {b.pending_count === 1 ? "" : "s"})
-                </option>
-              ))}
-            </select>
+              onChange={setBatchId}
+              className="w-full"
+              options={availableBatches.map((b) => ({
+                value: String(b.id),
+                label: `${b.plan_name} — ${b.months} mes${b.months === 1 ? "" : "es"} (${b.pending_count} disponible${b.pending_count === 1 ? "" : "s"})`,
+              }))}
+            />
             <span className="px-1 text-xs text-muted-foreground">
-              Ya está pago — asignarlo no genera un cobro nuevo, solo extiende el plan de esta
-              organización.
+              Ya está pago — asignarlo no genera un cobro nuevo, solo extiende el plan de este
+              emprendedor.
             </span>
           </label>
 

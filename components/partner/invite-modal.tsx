@@ -127,7 +127,7 @@ export function InviteModal({ open, onClose }: { open: boolean; onClose: () => v
   const newestIsFresh = newest?.status === "ACTIVE" && !newest.usedAt;
 
   return (
-    <Modal open={open} onClose={onClose} title="Agregar organización" maxWidthClassName="max-w-md">
+    <Modal open={open} onClose={onClose} title="Agregar emprendedor" maxWidthClassName="max-w-md">
       <div className="flex flex-col gap-4">
         <p className="text-xs text-muted-foreground">
           Generá un código para sumar un emprendedor a tu portafolio. Compartí el <strong>enlace</strong> si

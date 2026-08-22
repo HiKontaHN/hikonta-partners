@@ -6,14 +6,13 @@ import { AdoptionTrendChart, type AdoptionMonth } from "@/components/partner/ado
 import { IncomeTrendChart } from "@/components/partner/income-trend-chart";
 import { Card } from "@/components/ui/card";
 import { PageSpinner } from "@/components/ui/spinner";
-import { formatCurrency } from "@/lib/utils";
 import { Lineicons } from "@lineiconshq/react-lineicons";
 import {
   BarChart4Outlined,
   UserMultiple4Outlined,
   User4Outlined,
   Buildings1Outlined,
-  DollarCircleOutlined,
+  Cart1Outlined,
   Briefcase1Outlined,
 } from "@lineiconshq/free-icons";
 
@@ -29,14 +28,16 @@ type AdoptionResponse = {
     recommendation: "GOOD" | "MODERATE" | "NEEDS_ATTENTION";
     impact: {
       beneficiaries: number;
-      totalSalesGenerated: number;
+      salesTransactionsGenerated: number;
       sectorsBenefited: SectorSlice[];
     };
   };
 };
 
 type TrendsResponse = {
-  data: { months: (AdoptionMonth & { income: number })[] };
+  // `income` acá es % de variación vs el mes anterior, no un monto — ver
+  // /api/partner/reports/trends (política de ética de datos financieros).
+  data: { months: (AdoptionMonth & { income: number | null })[] };
 };
 
 const RECOMMENDATION_LABEL: Record<AdoptionResponse["data"]["recommendation"], string> = {
@@ -73,15 +74,20 @@ export default function ReportsPage() {
       {!trendsLoading && trends && (
         <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
           <AdoptionTrendChart months={trends.data.months} />
-          <IncomeTrendChart months={trends.data.months} />
+          <IncomeTrendChart
+            months={trends.data.months}
+            mode="percent"
+            note="Variación % de ingresos vs el mes anterior — nunca se muestra el monto."
+          />
         </div>
       )}
 
       {/* Reporte para terceros — sección 19 de ideas-feasibility.md. Pensado
           para que el partner lo muestre tal cual a un patrocinador/fondo:
           beneficiarios, ventas generadas por el ecosistema, y sectores
-          beneficiados. Ventas generadas gateado por share_financials igual
-          que el resto del panel (viene ya filtrado desde la API). */}
+          beneficiados. "Ventas generadas" es un CONTEO de transacciones,
+          nunca un monto (ver política de ética de datos financieros) —
+          por eso ya no necesita ningún gate, viene de todo el portafolio. */}
       <div className="mt-6">
         <h2 className="mb-1 text-lg font-semibold">Reporte para terceros</h2>
         <p className="mb-4 text-sm text-muted-foreground">
@@ -99,9 +105,9 @@ export default function ReportsPage() {
           />
           <StatCard
             title="Ventas generadas"
-            value={formatCurrency(r.impact.totalSalesGenerated)}
-            subtitle="Histórico, orgs que comparten datos financieros"
-            icon={DollarCircleOutlined}
+            value={r.impact.salesTransactionsGenerated}
+            subtitle="Histórico, todo el portafolio"
+            icon={Cart1Outlined}
             tone="green"
           />
           <StatCard

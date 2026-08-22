@@ -26,7 +26,7 @@ import {
 // el detalle de organización, que ya muestra la misma información como
 // tendencia % (ver ImpactBanner en organizations/[id]/page.tsx).
 const NAV = [
-  { href: "/dashboard", label: "Resumen", icon: Home2Outlined },
+  { href: "/dashboard", label: "Dashboard", icon: Home2Outlined },
   { href: "/organizations", label: "Emprendedores", icon: Briefcase1Outlined },
   { href: "/subscriptions", label: "Suscripciones", icon: Crown3Outlined },
   { href: "/reports", label: "Reportes", icon: BarChart4Outlined },
@@ -80,7 +80,7 @@ export default function PartnerLayout({ children }: { children: React.ReactNode 
           <h1 className="text-lg font-extrabold tracking-tight">Cuenta pendiente de aprobación</h1>
           <p className="mx-auto mt-1.5 max-w-sm text-sm text-muted-foreground">
             Ya registraste tu incubadora. El equipo de HiKonta necesita aprobar tu acceso y
-            vincular tus organizaciones antes de que veas datos aquí — te avisamos por correo.
+            vincular tus emprendedores antes de que veas datos aquí — te avisamos por correo.
           </p>
         </div>
         <button
@@ -99,7 +99,6 @@ export default function PartnerLayout({ children }: { children: React.ReactNode 
   // TS no arrastra el narrowing de `me` hacia las funciones anidadas de
   // abajo (aunque se ejecutan en el mismo render) — se recaptura acá.
   const partner = me;
-  const currentLabel = NAV.find((item) => pathname.startsWith(item.href))?.label ?? "";
 
   // ── Nav — con tooltip flotante propio cuando está colapsado ──────────
   function renderNav(collapsedMode: boolean) {
@@ -185,6 +184,10 @@ export default function PartnerLayout({ children }: { children: React.ReactNode 
               <p className="truncate text-muted-foreground">{partner.email}</p>
             </div>
           )}
+          {/* Toggle de modo oscuro — vivía en la navbar de arriba, ahora
+              vive acá para que exista un solo lugar de navegación (ver
+              header de abajo, que ya no se renderiza en desktop). */}
+          <ThemeToggle collapsed={collapsedMode} />
           <button
             onClick={() => signOut()}
             aria-label="Cerrar sesión"
@@ -241,26 +244,21 @@ export default function PartnerLayout({ children }: { children: React.ReactNode 
             mt-3 en cada uno: así el hueco es el mismo tenga la página un
             header registrado o no (ver components/partner/page-header-slot). */}
         <div className="flex min-w-0 flex-1 flex-col gap-3 overflow-hidden p-3 sm:p-4 md:pl-0">
-          {/* ── Navbar: isla flotante igual que el sidebar — rounded-2xl +
-              sombra, sin borde. Hamburguesa+logo en mobile, título de página
-              en desktop; el toggle de modo oscuro vive acá, no en el sidebar ── */}
-          <header className="card-elevated flex shrink-0 items-center gap-3 rounded-2xl bg-card px-4 py-3">
+          {/* ── Navbar: solo existe en mobile, como trigger del drawer (el
+              sidebar ya está siempre visible en desktop, así que ahí no hace
+              falta nav de arriba — ver renderSidebarBody para el toggle de
+              modo oscuro, que se mudó a la sidebar). ── */}
+          <header className="card-elevated flex shrink-0 items-center gap-3 rounded-2xl bg-card px-4 py-3 md:hidden">
             <button
               onClick={() => setNavOpen((v) => !v)}
               aria-label="Abrir menú"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted md:hidden"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted"
             >
               <Lineicons icon={navOpen ? XmarkOutlined : MenuHamburger1Outlined} size={18} />
             </button>
-            <div className="flex items-center gap-2 md:hidden">
+            <div className="flex items-center gap-2">
               <HiKontaIcon className="h-7 w-7" />
               <span className="text-sm font-bold tracking-tight">HiKonta Partners</span>
-            </div>
-
-            <h1 className="hidden text-base font-bold tracking-tight md:block">{currentLabel}</h1>
-
-            <div className="ml-auto">
-              <ThemeToggle collapsed />
             </div>
           </header>
 

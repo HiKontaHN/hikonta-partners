@@ -1,15 +1,17 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { usePartnerSWR } from "@/hooks/use-partner-swr";
 import { useDebounce } from "@/hooks/use-debounce";
 import { usePageHeader } from "@/components/partner/page-header-slot";
+import { PeriodPicker, MONTH_LABELS, pickDefaultPeriod, type AvailablePeriod } from "@/components/partner/period-picker";
 import { Badge } from "@/components/ui/badge";
 import { PageSpinner } from "@/components/ui/spinner";
 import { Button } from "@/components/ui/button";
+import { Select } from "@/components/ui/select";
 import { InviteModal } from "@/components/partner/invite-modal";
-import { formatCurrency, formatDateShort } from "@/lib/utils";
+import { formatDateShort } from "@/lib/utils";
 import { Lineicons } from "@lineiconshq/react-lineicons";
 import {
   Search1Outlined,
@@ -36,12 +38,11 @@ type OrgRow = {
   joinedAt: string;
   daysActive: number;
   status: "ACTIVE" | "INACTIVE" | "DORMANT";
-  shareFinancials: boolean;
-  incomeThisMonth: number | null;
   incomeTrendPct: number | null;
 };
 
-type OrgsResponse = { data: OrgRow[]; total: number; page: number; pages: number };
+type OrgsResponse = { data: OrgRow[]; total: number; page: number; pages: number; period: AvailablePeriod };
+type PeriodsResponse = { data: AvailablePeriod[] };
 
 // Solo se usa para poblar las opciones del filtro de sector con el conteo
 // real del portafolio completo — ya lo calcula /api/partner/dashboard
@@ -51,8 +52,8 @@ type DashboardResponse = { data: { sectorBreakdown: SectorSlice[] } };
 
 const STATUS_LABEL: Record<OrgRow["status"], string> = {
   ACTIVE: "Activo",
-  INACTIVE: "Inactivo",
-  DORMANT: "Dormant",
+  INACTIVE: "En riesgo",
+  DORMANT: "Inactivos",
 };
 
 const STATUS_VARIANT: Record<OrgRow["status"], "success" | "warning" | "muted"> = {
@@ -87,11 +88,26 @@ export default function OrganizationsPage() {
     setPage(1);
   }, []);
 
+  // Filtro de mes/año — mismos períodos disponibles que el dashboard (todo
+  // el portafolio), ver lib/periods.ts en el backend.
+  const { data: periodsData } = usePartnerSWR<PeriodsResponse>("/api/partner/dashboard/periods");
+  const periods = periodsData?.data ?? [];
+  const [period, setPeriod] = useState<AvailablePeriod | null>(null);
+  useEffect(() => {
+    if (period || periods.length === 0) return;
+    setPeriod(pickDefaultPeriod(periods));
+  }, [periods, period]);
+  const handlePeriod = useCallback((p: AvailablePeriod) => {
+    setPeriod(p);
+    setPage(1);
+  }, []);
+
   const qs = new URLSearchParams({
     search: debouncedSearch,
     status,
     industry,
     page: String(page),
+    ...(period ? { year: String(period.year), month: String(period.month) } : {}),
   }).toString();
 
   const { data, isLoading, mutate } = usePartnerSWR<OrgsResponse>(`/api/partner/organizations?${qs}`);
@@ -99,6 +115,7 @@ export default function OrganizationsPage() {
   const sectors = dashboardData?.data.sectorBreakdown ?? [];
 
   const hasFilters = search !== "" || status !== "all" || industry !== "all";
+  const periodLabel = data ? `${MONTH_LABELS[data.period.month - 1]} ${data.period.year}` : "";
 
   // Título + acción + filtros — registrado en el slot fijo del layout (ver
   // components/partner/page-header-slot), NO `position: sticky`, mismo
@@ -113,11 +130,16 @@ export default function OrganizationsPage() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-xl font-semibold">Emprendedores</h1>
-            <p className="text-sm text-muted-foreground">Organizaciones vinculadas a tu portafolio.</p>
+            <p className="text-sm text-muted-foreground">Emprendedores vinculados a tu portafolio.</p>
           </div>
-          <Button type="button" onClick={() => setInviteOpen(true)}>
-            + Agregar organización
-          </Button>
+          <div className="flex items-center gap-2">
+            {periods.length > 0 && (
+              <PeriodPicker periods={periods} value={period ?? periods[0]} onChange={handlePeriod} />
+            )}
+            <Button type="button" onClick={() => setInviteOpen(true)}>
+              + Agregar emprendedor
+            </Button>
+          </div>
         </div>
 
         <div className="mt-4 flex flex-col gap-2 sm:flex-row">
@@ -132,28 +154,33 @@ export default function OrganizationsPage() {
               className={`${INPUT_CLASS} w-full pl-10`}
             />
           </div>
-          <select value={status} onChange={(e) => handleStatus(e.target.value)} className={`${INPUT_CLASS} sm:w-44`}>
-            <option value="all">Todos los estados</option>
-            <option value="ACTIVE">Activo</option>
-            <option value="INACTIVE">Inactivo</option>
-            <option value="DORMANT">Dormant</option>
-          </select>
-          <select
+          <Select
+            value={status}
+            onChange={handleStatus}
+            className="sm:w-44"
+            options={[
+              { value: "all", label: "Todos los estados" },
+              { value: "ACTIVE", label: "Activo" },
+              { value: "INACTIVE", label: "En riesgo" },
+              { value: "DORMANT", label: "Inactivos" },
+            ]}
+          />
+          <Select
             value={industry}
-            onChange={(e) => handleIndustry(e.target.value)}
-            className={`${INPUT_CLASS} sm:w-56`}
-          >
-            <option value="all">Todos los sectores</option>
-            {sectors.map((s) => (
-              <option key={s.industryId ?? "none"} value={s.industryId === null ? "none" : String(s.industryId)}>
-                {s.industryName} ({s.count})
-              </option>
-            ))}
-          </select>
+            onChange={handleIndustry}
+            className="sm:w-56"
+            options={[
+              { value: "all", label: "Todos los sectores" },
+              ...sectors.map((s) => ({
+                value: s.industryId === null ? "none" : String(s.industryId),
+                label: `${s.industryName} (${s.count})`,
+              })),
+            ]}
+          />
         </div>
       </div>
     ),
-    [search, status, industry, sectors, handleSearch, handleStatus, handleIndustry]
+    [search, status, industry, sectors, handleSearch, handleStatus, handleIndustry, periods, period, handlePeriod]
   );
 
   return (
@@ -163,15 +190,20 @@ export default function OrganizationsPage() {
       {data && data.data.length === 0 && (
         <p className="text-sm text-muted-foreground">
           {hasFilters
-            ? "Ninguna organización coincide con ese filtro."
-            : "Todavía no hay organizaciones vinculadas a tu portafolio."}
+            ? "Ningún emprendedor coincide con ese filtro."
+            : "Todavía no hay emprendedores vinculados a tu portafolio."}
         </p>
       )}
 
       {data && data.data.length > 0 && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {data.data.map((org) => (
-            <OrgCard key={org.id} org={org} onClick={() => router.push(`/organizations/${org.id}`)} />
+            <OrgCard
+              key={org.id}
+              org={org}
+              periodLabel={periodLabel}
+              onClick={() => router.push(`/organizations/${org.id}`)}
+            />
           ))}
         </div>
       )}
@@ -215,7 +247,7 @@ export default function OrganizationsPage() {
   );
 }
 
-function OrgCard({ org, onClick }: { org: OrgRow; onClick: () => void }) {
+function OrgCard({ org, periodLabel, onClick }: { org: OrgRow; periodLabel: string; onClick: () => void }) {
   return (
     <div
       onClick={onClick}
@@ -253,23 +285,14 @@ function OrgCard({ org, onClick }: { org: OrgRow; onClick: () => void }) {
         </div>
         <div>
           <p className="text-xs text-muted-foreground">Transacciones</p>
-          <p className="mt-0.5 font-medium">{org.salesThisMonth} este mes</p>
+          <p className="mt-0.5 font-medium">{org.salesThisMonth} en {periodLabel}</p>
         </div>
-        <div>
-          <p className="text-xs text-muted-foreground">Ingresos</p>
-          <p className="mt-0.5 font-medium">
-            {org.shareFinancials ? (
-              formatCurrency(org.incomeThisMonth ?? 0)
-            ) : (
-              <span className="text-muted-foreground" title="No autorizó compartir montos">
-                —
-              </span>
-            )}
-          </p>
-        </div>
-        <div>
-          <p className="text-xs text-muted-foreground">Tendencia</p>
-          {org.shareFinancials && org.incomeTrendPct !== null ? (
+        {/* Nunca se muestra el monto de ingresos (ver política de ética de
+            datos financieros) — solo la tendencia %, calculada sobre el
+            valor real de la org. null si no hay mes anterior con datos. */}
+        <div className="col-span-2">
+          <p className="text-xs text-muted-foreground">Crecimiento en ingresos</p>
+          {org.incomeTrendPct !== null ? (
             <p
               className={`mt-0.5 flex items-center gap-1 font-medium ${
                 org.incomeTrendPct >= 0 ? "text-chip-green" : "text-destructive"
@@ -277,7 +300,7 @@ function OrgCard({ org, onClick }: { org: OrgRow; onClick: () => void }) {
             >
               <Lineicons icon={org.incomeTrendPct >= 0 ? TrendUp1Outlined : TrendDown1Outlined} size={12} />
               {org.incomeTrendPct >= 0 ? "+" : ""}
-              {org.incomeTrendPct}%
+              {org.incomeTrendPct}% vs mes anterior
             </p>
           ) : (
             <p className="mt-0.5 text-muted-foreground">—</p>

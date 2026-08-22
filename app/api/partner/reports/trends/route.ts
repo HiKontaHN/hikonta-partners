@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { verifyPartner, createErrorResponse, isAuthSuccess } from "@/lib/auth";
 import { sql } from "@/lib/db";
+import { pctChange } from "@/lib/growth";
 
 // Fase 2 de documentation/dashboard.md — series mensuales para los gráficos
 // de la página Reportes (adopción + ingresos, últimos 6 meses).
@@ -23,7 +24,7 @@ export async function GET(request: NextRequest) {
         FROM generate_series(${MONTHS - 1}, 0, -1) AS n
       ),
       portfolio AS (
-        SELECT o.id, po.linked_at, po.share_financials
+        SELECT o.id, po.linked_at
         FROM organizations o
         JOIN partner_organizations po ON po.org_id = o.id
         WHERE po.partner_id = ${auth.data.partnerId}
@@ -52,9 +53,13 @@ export async function GET(request: NextRequest) {
         GROUP BY m.month_start
       ),
       income AS (
+        -- Sin gate de share_financials: nunca se expone el monto (ver
+        -- política de ética de datos financieros), así que sumar sobre el
+        -- valor real de TODAS las orgs no revela nada — más abajo se
+        -- convierte a % de variación antes de salir de este endpoint.
         SELECT m.month_start, COALESCE(SUM(s.total), 0) AS income
         FROM months m
-        JOIN portfolio p ON p.share_financials = TRUE AND p.linked_at < m.month_start + INTERVAL '1 month'
+        JOIN portfolio p ON p.linked_at < m.month_start + INTERVAL '1 month'
         LEFT JOIN sales s
           ON s.org_id = p.id
           AND s.sold_at >= m.month_start AND s.sold_at < m.month_start + INTERVAL '1 month'
@@ -72,7 +77,9 @@ export async function GET(request: NextRequest) {
       ORDER BY m.month_start
     `;
 
-    const months = (rows as any[]).map((r) => {
+    const rawIncomes = (rows as any[]).map((r) => Number(r.income));
+
+    const months = (rows as any[]).map((r, i) => {
       const enrolled = r.enrolled_count as number;
       const active = r.active_count as number;
       return {
@@ -83,7 +90,10 @@ export async function GET(request: NextRequest) {
         enrolledCount: enrolled,
         activeCount: active,
         adoptionRate: enrolled > 0 ? Number(((active / enrolled) * 100).toFixed(1)) : 0,
-        income: Number(r.income),
+        // % de variación vs el mes anterior de la propia serie — nunca el
+        // monto (ver política de ética de datos financieros). El primer
+        // mes no tiene anterior, queda null.
+        income: i > 0 ? pctChange(rawIncomes[i], rawIncomes[i - 1]) : null,
       };
     });
 

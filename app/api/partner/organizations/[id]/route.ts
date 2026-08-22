@@ -2,6 +2,8 @@ import { NextRequest } from "next/server";
 import { verifyPartner, createErrorResponse, isAuthSuccess, requireOwnedOrganization } from "@/lib/auth";
 import { sql } from "@/lib/db";
 import { computeImpact } from "@/lib/impact";
+import { resolvePeriod } from "@/lib/periods";
+import { pctChange } from "@/lib/growth";
 
 const WEEKS = 8;
 const MONTHS = 12;
@@ -37,12 +39,16 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const { searchParams } = new URL(request.url);
   const periodKey = searchParams.get("period") ?? DEFAULT_PERIOD;
   const period = PERIOD_PRESETS[periodKey] ?? PERIOD_PRESETS[DEFAULT_PERIOD];
+  // Mes/año de las stat cards "este mes" (ventas, ingresos, ganancias) —
+  // ?year=&month=, distinto del `period` de arriba (que es el rango relativo
+  // del gráfico de ingresos/ganancias, ej. "12m"). Ver lib/periods.ts.
+  const statsPeriod = resolvePeriod(searchParams);
 
   try {
     const [org] = await sql`
       SELECT
         o.id, o.name, o.logo_url, o.created_at, o.timezone, o.currency,
-        po.share_financials, po.linked_at,
+        po.linked_at,
         u.display_name AS owner_name, u.email AS owner_email,
         i.name AS industry_name,
         os.plan_id, os.status AS subscription_status, os.current_period_end,
@@ -60,7 +66,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       WHERE o.id = ${orgId}
     `;
 
-    if (!org) return createErrorResponse("Organización no encontrada", 404);
+    if (!org) return createErrorResponse("Emprendedor no encontrado", 404);
 
     const sinceActivity = (Date.now() - new Date(org.last_activity_at).getTime()) / 86_400_000;
     const status: "ACTIVE" | "INACTIVE" | "DORMANT" =
@@ -72,7 +78,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         (SELECT COUNT(*) FROM products     WHERE org_id = ${orgId} AND is_active = TRUE) AS total_products,
         (SELECT COUNT(*) FROM customers    WHERE org_id = ${orgId}) AS total_customers,
         (SELECT COUNT(*) FROM sales WHERE org_id = ${orgId}
-           AND DATE_TRUNC('month', sold_at) = DATE_TRUNC('month', NOW())) AS sales_this_month
+           AND DATE_TRUNC('month', sold_at) = DATE_TRUNC('month', ${statsPeriod.periodStart}::date)) AS sales_this_month
     `;
 
     // Meses patrocinados por este partner (si aplica)
@@ -156,16 +162,14 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       ? Number((((activityThisMonth - activityLastMonth) / activityLastMonth) * 100).toFixed(1))
       : null;
 
-    // Gráfico de ingresos vs ganancias — SIEMPRE se calcula y se muestra,
-    // incluso sin permiso (a pedido del partner: lo que le importa es la
-    // forma/tendencia, no el monto exacto). Ganancia = line_total - costo -
-    // impuesto proporcional, misma fórmula que "Ventas vs Ganancias" en
-    // yelifin-sistema (comparten la misma base Neon, ver lib/db.ts).
-    // Ingreso y ganancia se calculan en CTEs separados: unirlos en un solo
-    // JOIN contra sale_items multiplicaría s.total por cada línea de venta.
-    // `unit`/`unitPlural` salen de PERIOD_PRESETS (whitelist arriba), nunca
-    // del query string directo — es seguro concatenarlos en el SQL.
-    const shareFinancials = org.share_financials === true;
+    // Gráfico de ingresos vs ganancias — SIEMPRE se calcula y se muestra.
+    // Ganancia = line_total - costo - impuesto proporcional, misma fórmula
+    // que "Ventas vs Ganancias" en yelifin-sistema (comparten la misma base
+    // Neon, ver lib/db.ts). Ingreso y ganancia se calculan en CTEs
+    // separados: unirlos en un solo JOIN contra sale_items multiplicaría
+    // s.total por cada línea de venta. `unit`/`unitPlural` salen de
+    // PERIOD_PRESETS (whitelist arriba), nunca del query string directo —
+    // es seguro concatenarlos en el SQL.
     const financialRows = await sql`
       WITH periods AS (
         SELECT date_trunc(${period.unit}, now()) - (n || ' ' || ${period.unitPlural})::interval AS period_start
@@ -203,8 +207,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       ORDER BY pi.period_start
     `;
 
-    // Estos montos NUNCA salen de este endpoint sin permiso — `financialPoints`
-    // solo se usa acá adentro para derivar % cuando !shareFinancials.
+    // Estos montos NUNCA salen de este endpoint — `financialPoints` solo se
+    // usa acá adentro para derivar el % de variación entre períodos (ver
+    // política de ética de datos financieros, documentation/dashboard.md).
     const financialPoints = (financialRows as any[]).map((r) => ({
       period:
         period.unit === "day"
@@ -214,43 +219,40 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       profit: Number(r.profit),
     }));
 
-    const pctChange = (curr: number, prev: number) =>
-      prev > 0 ? Number((((curr - prev) / prev) * 100).toFixed(1)) : null;
-
-    const financialChart = shareFinancials
-      ? { mode: "amount" as const, granularity: period.unit, points: financialPoints }
-      : {
-          mode: "percent" as const,
-          granularity: period.unit,
-          // % de variación vs el período anterior del propio gráfico —
-          // nunca el monto. El primer punto no tiene anterior, queda null.
-          points: financialPoints.map((p, i) => {
-            const prev = financialPoints[i - 1];
-            return {
-              period: p.period,
-              income: prev ? pctChange(p.income, prev.income) : null,
-              profit: prev ? pctChange(p.profit, prev.profit) : null,
-            };
-          }),
+    // Siempre en modo "percent": % de variación vs el período anterior del
+    // propio gráfico, nunca el monto. El primer punto no tiene anterior,
+    // queda null (nunca se inventa un %).
+    const financialChart = {
+      mode: "percent" as const,
+      granularity: period.unit,
+      points: financialPoints.map((p, i) => {
+        const prev = financialPoints[i - 1];
+        return {
+          period: p.period,
+          income: prev ? pctChange(p.income, prev.income) : null,
+          profit: prev ? pctChange(p.profit, prev.profit) : null,
         };
+      }),
+    };
 
     // "Este mes" para las stat cards de arriba — independiente del período
-    // elegido para el gráfico (que puede estar en modo días). Sigue
-    // gateado por share_financials porque ACÁ sí se muestra el monto.
+    // elegido para el gráfico (que puede estar en modo días). Se calcula
+    // sobre el valor real de la org, pero solo sale el % (nunca el monto,
+    // ver política de ética de datos financieros).
     const [monthIncomeStats] = await sql`
       SELECT
-        COALESCE(SUM(total) FILTER (WHERE DATE_TRUNC('month', sold_at) = DATE_TRUNC('month', NOW())), 0) AS this_month,
-        COALESCE(SUM(total) FILTER (WHERE DATE_TRUNC('month', sold_at) = DATE_TRUNC('month', NOW() - INTERVAL '1 month')), 0) AS last_month
+        COALESCE(SUM(total) FILTER (WHERE DATE_TRUNC('month', sold_at) = DATE_TRUNC('month', ${statsPeriod.periodStart}::date)), 0) AS this_month,
+        COALESCE(SUM(total) FILTER (WHERE DATE_TRUNC('month', sold_at) = DATE_TRUNC('month', ${statsPeriod.periodStart}::date - INTERVAL '1 month')), 0) AS last_month
       FROM sales
       WHERE org_id = ${orgId}
     `;
     const [monthProfitStats] = await sql`
       SELECT
-        COALESCE(SUM(CASE WHEN DATE_TRUNC('month', s.sold_at) = DATE_TRUNC('month', NOW()) THEN
+        COALESCE(SUM(CASE WHEN DATE_TRUNC('month', s.sold_at) = DATE_TRUNC('month', ${statsPeriod.periodStart}::date) THEN
           si.line_total - (si.unit_cost * si.quantity) - COALESCE(
             CASE WHEN (s.subtotal - s.discount) > 0 THEN (s.tax * si.line_total / (s.subtotal - s.discount)) ELSE 0 END, 0)
           ELSE 0 END), 0) AS this_month,
-        COALESCE(SUM(CASE WHEN DATE_TRUNC('month', s.sold_at) = DATE_TRUNC('month', NOW() - INTERVAL '1 month') THEN
+        COALESCE(SUM(CASE WHEN DATE_TRUNC('month', s.sold_at) = DATE_TRUNC('month', ${statsPeriod.periodStart}::date - INTERVAL '1 month') THEN
           si.line_total - (si.unit_cost * si.quantity) - COALESCE(
             CASE WHEN (s.subtotal - s.discount) > 0 THEN (s.tax * si.line_total / (s.subtotal - s.discount)) ELSE 0 END, 0)
           ELSE 0 END), 0) AS last_month
@@ -263,8 +265,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const profitThisMonthNum = Number(monthProfitStats.this_month);
     const profitLastMonthNum = Number(monthProfitStats.last_month);
 
+    // `total` a propósito NO se selecciona acá — nunca sale de este
+    // endpoint (ver política de ética de datos financieros más arriba).
     const recentSalesRows = await sql`
-      SELECT id, sale_number, sold_at, total, status
+      SELECT id, sale_number, sold_at, status
       FROM sales
       WHERE org_id = ${orgId}
       ORDER BY sold_at DESC
@@ -276,10 +280,12 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         id: org.id,
         name: org.name,
         logoUrl: org.logo_url,
+        // Mes/año que se usó para las stat cards "este mes" de abajo —
+        // ver statsPeriod arriba.
+        statsPeriod: { year: statsPeriod.year, month: statsPeriod.month },
         createdAt: org.created_at,
         timezone: org.timezone,
         currency: org.currency,
-        shareFinancials,
         linkedAt: org.linked_at,
         ownerName: org.owner_name,
         ownerEmail: org.owner_email,
@@ -311,28 +317,24 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
           startedFromZero: impact.startedFromZero,
         },
         activityTrendPct,
-        // Gráfico de ingresos/ganancias — SIEMPRE presente. `mode: "amount"`
-        // trae montos reales (org autorizó compartir), `mode: "percent"`
-        // trae solo % de variación entre períodos (nunca un monto).
+        // Gráfico de ingresos/ganancias — SIEMPRE en modo "percent": solo %
+        // de variación entre períodos, nunca un monto (ver política de
+        // ética de datos financieros).
         financialChart,
-        // Este mes vs mes anterior — SIEMPRE gateado por share_financials,
-        // porque acá sí se expone un monto (no un %). null si no autorizó
-        // o no hay mes anterior con datos para comparar.
-        incomeThisMonth: shareFinancials ? incomeThisMonthNum : null,
-        incomeTrendPct: shareFinancials ? pctChange(incomeThisMonthNum, incomeLastMonthNum) : null,
-        profitThisMonth: shareFinancials ? profitThisMonthNum : null,
-        profitTrendPct: shareFinancials ? pctChange(profitThisMonthNum, profitLastMonthNum) : null,
+        // Este mes vs mes anterior — solo el %, nunca el monto. null si no
+        // hay mes anterior con datos para comparar (nunca se inventa un %).
+        incomeTrendPct: pctChange(incomeThisMonthNum, incomeLastMonthNum),
+        profitTrendPct: pctChange(profitThisMonthNum, profitLastMonthNum),
         recentSales: (recentSalesRows as any[]).map((s) => ({
           id: s.id,
           saleNumber: s.sale_number,
           soldAt: s.sold_at,
           status: s.status,
-          total: shareFinancials ? Number(s.total) : null,
         })),
       },
     });
   } catch (error) {
     console.error("GET /api/partner/organizations/[id]:", error);
-    return createErrorResponse("Error al obtener la organización", 500);
+    return createErrorResponse("Error al obtener el emprendedor", 500);
   }
 }
