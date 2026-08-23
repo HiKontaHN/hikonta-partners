@@ -28,3 +28,17 @@ export function formatDateShort(date: Date | string): string {
     day: "2-digit",
   }).format(new Date(date));
 }
+
+// "hace X" en español, para listas de actividad (ej. adopción por negocio).
+// A propósito no usa date-fns: la app no lo tiene importado en ningún lado
+// todavía, y esto es simple de resolver a mano sin sumar una dependencia.
+export function formatRelativeDays(date: Date | string): string {
+  const days = Math.floor((Date.now() - new Date(date).getTime()) / 86_400_000);
+  if (days <= 0) return "hoy";
+  if (days === 1) return "ayer";
+  if (days < 30) return `hace ${days} días`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `hace ${months} mes${months === 1 ? "" : "es"}`;
+  const years = Math.floor(months / 12);
+  return `hace ${years} año${years === 1 ? "" : "s"}`;
+}

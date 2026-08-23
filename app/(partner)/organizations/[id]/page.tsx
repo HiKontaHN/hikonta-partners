@@ -9,6 +9,7 @@ import { PeriodPicker, MONTH_LABELS, pickDefaultPeriod, type AvailablePeriod } f
 import { Card } from "@/components/ui/card";
 import { PageSpinner } from "@/components/ui/spinner";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { SponsorModal } from "@/components/partner/sponsor-modal";
@@ -28,6 +29,7 @@ import {
   CalendarDaysOutlined,
   DollarCircleOutlined,
   Rocket5Outlined,
+  QuestionMarkCircleOutlined,
 } from "@lineiconshq/free-icons";
 
 type OrgDetail = {
@@ -131,42 +133,46 @@ export default function OrganizationDetailPage() {
   // sería una referencia nueva cada render) para no reescribir el slot en
   // cada ciclo de render.
   usePageHeader(
-    () =>
-      org ? (
-        <div className="card-elevated flex flex-wrap items-start justify-between gap-3 rounded-2xl bg-card px-4 py-4 sm:px-5">
-          <div className="flex items-center gap-3">
-            {org.logoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={org.logoUrl} alt="" className="h-12 w-12 rounded-full object-cover" />
-            ) : (
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-chip-blue-bg text-lg font-extrabold text-chip-blue">
-                {org.name.charAt(0).toUpperCase()}
+    () => (
+      <div className="card-elevated rounded-2xl bg-card px-4 py-4 sm:px-5">
+        <BackLink />
+        {org && (
+          <div className="mt-3 flex flex-wrap items-start justify-between gap-3">
+            <div className="flex items-center gap-3">
+              {org.logoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={org.logoUrl} alt="" className="h-12 w-12 rounded-full object-cover" />
+              ) : (
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-chip-blue-bg text-lg font-extrabold text-chip-blue">
+                  {org.name.charAt(0).toUpperCase()}
+                </div>
+              )}
+              <div>
+                <h1 className="text-xl font-semibold">{org.name}</h1>
+                <p className="text-sm text-muted-foreground">
+                  {org.ownerName ?? org.ownerEmail ?? "Sin propietario asignado"}
+                </p>
               </div>
-            )}
-            <div>
-              <h1 className="text-xl font-semibold">{org.name}</h1>
-              <p className="text-sm text-muted-foreground">
-                {org.ownerName ?? org.ownerEmail ?? "Sin propietario asignado"}
-              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {org.industryName && <Badge variant="muted">{org.industryName}</Badge>}
+              {org.planName && (
+                <Badge variant="muted">
+                  <Lineicons icon={Crown3Outlined} size={12} />
+                  {org.planName}
+                </Badge>
+              )}
+              <Badge variant={STATUS_VARIANT[org.status]}>{STATUS_LABEL[org.status]}</Badge>
+              <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => setSponsorOpen(true)}>
+                <Lineicons icon={Wallet1Outlined} size={13} />
+                Patrocinar meses
+              </Button>
             </div>
           </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            {org.industryName && <Badge variant="muted">{org.industryName}</Badge>}
-            {org.planName && (
-              <Badge variant="muted">
-                <Lineicons icon={Crown3Outlined} size={12} />
-                {org.planName}
-              </Badge>
-            )}
-            <Badge variant={STATUS_VARIANT[org.status]}>{STATUS_LABEL[org.status]}</Badge>
-            <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => setSponsorOpen(true)}>
-              <Lineicons icon={Wallet1Outlined} size={13} />
-              Patrocinar meses
-            </Button>
-          </div>
-        </div>
-      ) : null,
+        )}
+      </div>
+    ),
     [org?.id, org?.name, org?.logoUrl, org?.ownerName, org?.ownerEmail, org?.industryName, org?.planName, org?.status]
   );
 
@@ -174,19 +180,14 @@ export default function OrganizationDetailPage() {
 
   if (error || !data || !org) {
     return (
-      <div>
-        <BackLink />
-        <p className="mt-4 text-sm text-muted-foreground">
-          No se pudo cargar este emprendedor — puede que no esté en tu portafolio.
-        </p>
-      </div>
+      <p className="text-sm text-muted-foreground">
+        No se pudo cargar este emprendedor — puede que no esté en tu portafolio.
+      </p>
     );
   }
 
   return (
     <div>
-      <BackLink />
-
       <ImpactBanner impact={org.impact} activityTrendPct={org.activityTrendPct} />
 
       <div className="mt-6 flex items-center justify-between gap-3">
@@ -203,19 +204,19 @@ export default function OrganizationDetailPage() {
           value={org.counts.salesThisMonth}
           subtitle={statsPeriodLabel}
           icon={Cart1Outlined}
-          tone="purple"
+          tone="blue"
         />
         <StatCard
           title="Productos activos"
           value={org.counts.totalProducts}
           icon={BasketShopping3Outlined}
-          tone="amber"
+          tone="blue"
         />
         <StatCard
           title="Clientes"
           value={org.counts.totalCustomers}
           icon={UserMultiple4Outlined}
-          tone="green"
+          tone="blue"
         />
       </div>
 
@@ -229,14 +230,14 @@ export default function OrganizationDetailPage() {
           value={org.incomeTrendPct !== null ? `${org.incomeTrendPct >= 0 ? "+" : ""}${org.incomeTrendPct}%` : "—"}
           subtitle={`${statsPeriodLabel} vs mes anterior`}
           icon={DollarCircleOutlined}
-          tone="blue"
+          tone={org.incomeTrendPct !== null && org.incomeTrendPct < 0 ? "blue" : "green"}
         />
         <StatCard
           title="Crecimiento en ganancia"
           value={org.profitTrendPct !== null ? `${org.profitTrendPct >= 0 ? "+" : ""}${org.profitTrendPct}%` : "—"}
           subtitle={`${statsPeriodLabel} vs mes anterior`}
           icon={Wallet1Outlined}
-          tone="green"
+          tone={org.profitTrendPct !== null && org.profitTrendPct < 0 ? "blue" : "green"}
         />
       </div>
 
@@ -350,6 +351,10 @@ function ImpactBanner({
 }) {
   let headline: string;
   let detail: string;
+  // Solo cuando `detail` muestra una tasa "/mes" tiene sentido aclarar cómo
+  // se calcula ese número (promedio normalizado a 30 días) — en los otros
+  // casos el texto ya se explica solo.
+  let showRateInfo = false;
 
   if (!impact.hasBaseline) {
     headline = "Necesita más tiempo";
@@ -357,9 +362,11 @@ function ImpactBanner({
   } else if (impact.startedFromZero) {
     headline = "Empezó a operar";
     detail = `Sin actividad antes de unirse a tu portafolio — ahora registra ~${impact.afterAvgMonthly}/mes.`;
+    showRateInfo = true;
   } else if (impact.growthPct !== null) {
     headline = `${impact.growthPct >= 0 ? "+" : ""}${impact.growthPct}%`;
     detail = `~${impact.beforeAvgMonthly}/mes antes de unirse → ~${impact.afterAvgMonthly}/mes después.`;
+    showRateInfo = true;
   } else {
     headline = "Sin actividad";
     detail = "Todavía no registra ventas ni transacciones.";
@@ -373,13 +380,25 @@ function ImpactBanner({
             <Lineicons icon={Rocket5Outlined} size={20} color="var(--chip-green)" />
           </div>
           <div>
-            <p className="text-sm font-medium text-muted-foreground">Impacto desde que se unió a tu portafolio</p>
+            <p className="flex items-center gap-1 text-sm font-medium text-muted-foreground">
+              Impacto desde que se unió a tu portafolio
+              <Tooltip content="Compara cuánto usaba la plataforma este negocio (ventas + transacciones por mes) antes de unirse a tu portafolio contra ahora. Nunca es dinero, solo actividad.">
+                <Lineicons icon={QuestionMarkCircleOutlined} size={14} className="cursor-default text-muted-foreground/70" />
+              </Tooltip>
+            </p>
             <p className="mt-0.5 text-2xl font-extrabold tracking-tight">{headline}</p>
           </div>
         </div>
         <TrendBadge pct={activityTrendPct} />
       </div>
-      <p className="mt-3 text-xs text-muted-foreground">{detail}</p>
+      <p className="mt-3 flex items-center gap-1 text-xs text-muted-foreground">
+        {detail}
+        {showRateInfo && (
+          <Tooltip content="Es un promedio: se cuentan todas las ventas y transacciones del período (antes o después de unirse) y se ajustan a 'por 30 días', para poder comparar aunque los dos períodos hayan durado distinto tiempo.">
+            <Lineicons icon={QuestionMarkCircleOutlined} size={13} className="cursor-default text-muted-foreground/70" />
+          </Tooltip>
+        )}
+      </p>
     </Card>
   );
 }

@@ -2,6 +2,11 @@
 
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+// Alias para no chocar con el Tooltip de recharts (el de arriba, para el
+// hover sobre el gráfico) — este es el de "?" junto al título.
+import { Tooltip as InfoTooltip } from "@/components/ui/tooltip";
+import { Lineicons } from "@lineiconshq/react-lineicons";
+import { QuestionMarkCircleOutlined } from "@lineiconshq/free-icons";
 import { formatCurrency } from "@/lib/utils";
 
 const MONTH_LABEL = new Intl.DateTimeFormat("es-HN", { month: "short" });
@@ -66,7 +71,14 @@ export function IncomeTrendChart({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{title ?? defaultTitle}</CardTitle>
+        <CardTitle className="flex items-center gap-1">
+          {title ?? defaultTitle}
+          {mode === "percent" && (
+            <InfoTooltip content="Compara cada período con el anterior: si un mes creció 20% en ingresos, ese punto se dibuja en +20%. No es el ingreso real, solo cuánto varió respecto al período previo.">
+              <Lineicons icon={QuestionMarkCircleOutlined} size={14} className="cursor-default text-muted-foreground/70" />
+            </InfoTooltip>
+          )}
+        </CardTitle>
         {note && <p className="text-xs text-muted-foreground">{note}</p>}
       </CardHeader>
       <CardContent className="h-72 pt-4">

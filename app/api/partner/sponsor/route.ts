@@ -32,7 +32,13 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { orgId, batchId } = await request.json();
+    const body = await request.json();
+    // Number(...) antes de validar: algunos callers pueden mandar el id como
+    // string (ej. si viene de una columna bigint, que Neon devuelve como
+    // string) — Number.isFinite por sí solo NO coacciona strings ("123"
+    // pasaría como inválido aunque sea un id perfectamente válido).
+    const orgId = Number(body.orgId);
+    const batchId = Number(body.batchId);
 
     if (!Number.isFinite(orgId)) return createErrorResponse("orgId inválido", 400);
     if (!Number.isFinite(batchId)) return createErrorResponse("batchId inválido", 400);

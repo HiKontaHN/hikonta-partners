@@ -61,18 +61,30 @@ export async function GET(request: NextRequest) {
     const daysSince = (d: string) => (now - new Date(d).getTime()) / 86_400_000;
 
     let active = 0, inactive = 0, dormant = 0;
-    const alertOrgNames: string[] = [];
+    // "En alerta": nombre + el mismo status (inactive/dormant) que ya se
+    // cuenta arriba, para poder pintar un punto de color acorde en el
+    // frontend (ver PortfolioStatusCard).
+    const alertOrgs: { name: string; status: "inactive" | "dormant" }[] = [];
+    // Adopción = uso real de la plataforma, medido por qué tan reciente fue
+    // la última venta/transacción de cada negocio (mismo criterio que
+    // active/inactive/dormant arriba). Se ordena de más a menos reciente
+    // para la card "Adopción" del dashboard.
+    const orgActivity: { id: number; name: string; status: "active" | "inactive" | "dormant"; lastActivityAt: string }[] = [];
     for (const o of orgs as any[]) {
       const sinceActivity = daysSince(o.last_activity_at);
       const sinceCreated = daysSince(o.created_at);
-      if (sinceActivity <= ACTIVE_DAYS) active++;
-      else if (sinceActivity <= DORMANT_DAYS) inactive++;
+      const status = sinceActivity <= ACTIVE_DAYS ? "active" : sinceActivity <= DORMANT_DAYS ? "inactive" : "dormant";
+      if (status === "active") active++;
+      else if (status === "inactive") inactive++;
       else dormant++;
 
       // "En alerta": inactivo/dormant Y no es una org recién creada que
       // todavía no tuvo tiempo de probar la plataforma.
-      if (sinceActivity > ACTIVE_DAYS && sinceCreated > ACTIVE_DAYS) alertOrgNames.push(o.name);
+      if (status !== "active" && sinceCreated > ACTIVE_DAYS) alertOrgs.push({ name: o.name, status });
+
+      orgActivity.push({ id: o.id, name: o.name, status, lastActivityAt: o.last_activity_at });
     }
+    orgActivity.sort((a, b) => new Date(b.lastActivityAt).getTime() - new Date(a.lastActivityAt).getTime());
     const total = orgs.length;
 
     // Crecimiento en base a ingresos (mes vs mes anterior, todo el
@@ -272,8 +284,8 @@ export async function GET(request: NextRequest) {
           inactiveOrganizations: inactive,
           dormantOrganizations: dormant,
           adoptionRate: total > 0 ? Number(((active / total) * 100).toFixed(2)) : 0,
-          alertsCount: alertOrgNames.length,
-          alertOrgNames,
+          alertsCount: alertOrgs.length,
+          alertOrgs,
           transactionsThisMonth: txCount.count,
           // Nunca se expone un monto acá — solo % (ver política de ética de
           // datos financieros, documentation/dashboard.md).
@@ -285,6 +297,7 @@ export async function GET(request: NextRequest) {
           topGrowthSector,
         },
         topGrowthOrganizations: topGrowthOrgs,
+        orgActivity,
         sectorBreakdown: (sectorRows as any[]).map((s) => ({
           industryId: s.industry_id,
           industryName: s.industry_name ?? "Sin sector",

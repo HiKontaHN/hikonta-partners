@@ -6,7 +6,12 @@ import type { HTMLAttributes } from "react";
 export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={cn("card-elevated rounded-xl bg-card text-card-foreground", className)}
+      // min-w-0: sin esto, un Card usado como grid/flex item puede quedar
+      // más ancho que su columna si algo adentro no puede achicarse (texto
+      // sin wrap, etc.) — forzando scroll horizontal en vez de que el
+      // truncate interno haga su trabajo. No afecta a un Card fuera de un
+      // contexto grid/flex.
+      className={cn("card-elevated min-w-0 rounded-xl bg-card text-card-foreground", className)}
       {...props}
     />
   );

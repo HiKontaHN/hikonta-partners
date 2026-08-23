@@ -62,12 +62,12 @@ export default function ReportsPage() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard title="Inscritos" value={r.totalEnrolled} icon={UserMultiple4Outlined} tone="blue" />
         <StatCard title="Activos" value={r.activeUsers} icon={User4Outlined} tone="green" />
-        <StatCard title="Tasa de adopción" value={`${r.adoptionRate}%`} icon={BarChart4Outlined} tone="purple" />
+        <StatCard title="Tasa de adopción" value={`${r.adoptionRate}%`} icon={BarChart4Outlined} tone="blue" />
         <StatCard
           title="Recomendación"
           value={RECOMMENDATION_LABEL[r.recommendation]}
           icon={BarChart4Outlined}
-          tone={r.recommendation === "GOOD" ? "green" : r.recommendation === "MODERATE" ? "amber" : "blue"}
+          tone={r.recommendation === "GOOD" ? "green" : "blue"}
         />
       </div>
 
@@ -115,7 +115,7 @@ export default function ReportsPage() {
             value={r.impact.sectorsBenefited.length}
             subtitle="Industrias distintas en el portafolio"
             icon={Buildings1Outlined}
-            tone="purple"
+            tone="blue"
           />
         </div>
 
@@ -127,7 +127,7 @@ export default function ReportsPage() {
                 <div key={s.industryId ?? "sin-sector"} className="flex items-center gap-3 text-xs">
                   <span className="w-32 shrink-0 truncate font-semibold sm:w-48">{s.industryName}</span>
                   <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
-                    <div className="h-full bg-chip-purple" style={{ width: `${s.pct}%` }} />
+                    <div className="h-full bg-chip-blue" style={{ width: `${s.pct}%` }} />
                   </div>
                   <span className="w-20 shrink-0 text-right text-muted-foreground">
                     {s.count} · {s.pct}%

@@ -62,7 +62,10 @@
   --popover: #1D1E23;
   --popover-foreground: #F5F6F8;
   --primary: #4C7EFF;
-  --primary-foreground: #05060A;
+  /* Blanco fijo (no negro) en los botones azules — feedback de diseño
+     2026-08-23: la letra en botón azul siempre debe ser blanca, en
+     ambos temas. */
+  --primary-foreground: #FFFFFF;
   --secondary: #201F26;
   --secondary-foreground: #F5F6F8;
   --muted: #201F26;
@@ -81,7 +84,7 @@
   --sidebar: #0A0A0D;
   --sidebar-foreground: #C7C8D0;
   --sidebar-primary: #4C7EFF;
-  --sidebar-primary-foreground: #05060A;
+  --sidebar-primary-foreground: #FFFFFF;
   --sidebar-accent: #182449;
   --sidebar-accent-foreground: #8FB1FF;
   --sidebar-border: #1C1C22;

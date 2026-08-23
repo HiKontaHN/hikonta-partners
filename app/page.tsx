@@ -25,7 +25,7 @@ const FEATURES: { icon: IconValue; title: string; description: string; tone: key
   },
   {
     icon: Briefcase1Outlined,
-    tone: "purple",
+    tone: "blue",
     title: "Tu portafolio",
     description: "Cada negocio de tu incubadora: plan, ventas del mes y última vez que usó HiKonta.",
   },
@@ -37,17 +37,17 @@ const FEATURES: { icon: IconValue; title: string; description: string; tone: key
   },
   {
     icon: BarChart4Outlined,
-    tone: "amber",
+    tone: "blue",
     title: "Reporte de adopción",
     description: "El número que le llevas a tu directiva: % de adopción y una recomendación clara.",
   },
 ];
 
+// Solo dos tonos: azul (marca, valor por defecto) y verde (indicador
+// positivo). Ver feedback de diseño 2026-08-23.
 const CHIP = {
   blue: { fg: "var(--chip-blue)", bg: "var(--chip-blue-bg)" },
   green: { fg: "var(--chip-green)", bg: "var(--chip-green-bg)" },
-  amber: { fg: "var(--chip-amber)", bg: "var(--chip-amber-bg)" },
-  purple: { fg: "var(--chip-purple)", bg: "var(--chip-purple-bg)" },
 } as const;
 
 const STEPS = [
@@ -87,7 +87,7 @@ export default function LandingPage() {
 
       {/* ── Hero ────────────────────────────────────────────────────── */}
       <section className="mx-auto max-w-3xl px-4 pb-16 pt-10 text-center sm:px-6 sm:pb-20 sm:pt-20">
-        <span className="mb-5 inline-flex items-center gap-1.5 rounded-full bg-chip-purple-bg px-4 py-1.5 text-xs font-bold text-chip-purple">
+        <span className="mb-5 inline-flex items-center gap-1.5 rounded-full bg-chip-blue-bg px-4 py-1.5 text-xs font-bold text-chip-blue">
           <Lineicons icon={HandShakeOutlined} size={14} />
           Para incubadoras y aceleradoras
         </span>

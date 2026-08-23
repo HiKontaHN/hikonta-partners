@@ -73,8 +73,8 @@ export default function PartnerLayout({ children }: { children: React.ReactNode 
   if (pending) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background px-6 text-center">
-        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-chip-amber-bg">
-          <Lineicons icon={HourglassOutlined} size={26} color="var(--chip-amber)" />
+        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-chip-blue-bg">
+          <Lineicons icon={HourglassOutlined} size={26} color="var(--chip-blue)" />
         </div>
         <div>
           <h1 className="text-lg font-extrabold tracking-tight">Cuenta pendiente de aprobación</h1>
@@ -264,7 +264,12 @@ export default function PartnerLayout({ children }: { children: React.ReactNode 
 
           <PageHeaderOutlet />
 
-          <main className="min-h-0 flex-1 overflow-y-auto overflow-x-auto">
+          {/* overflow-x-hidden (no auto): el contenido de cada página debe
+              quedarse en una sola columna en mobile — si algo se desborda
+              horizontalmente se recorta en vez de habilitar scroll lateral
+              de toda la página (las tablas anchas, ej. suscripciones, ya
+              manejan su propio scroll horizontal local). */}
+          <main className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
             <div className="mx-auto max-w-6xl pb-3">{children}</div>
           </main>
         </div>

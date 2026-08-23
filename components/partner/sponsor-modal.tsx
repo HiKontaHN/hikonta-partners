@@ -77,7 +77,12 @@ export function SponsorModal({
       const res = await fetch("/api/partner/sponsor", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ orgId, batchId: Number(batchId) }),
+        // Number(orgId): el driver de Neon devuelve columnas bigint como
+        // string (para no perder precisión) — si el endpoint que originó
+        // este `orgId` lo trajo así (ej. o.id sin ::int en el SELECT), acá
+        // llegaría un string y el backend lo rechaza con "orgId inválido"
+        // (usa Number.isFinite, que no coacciona strings).
+        body: JSON.stringify({ orgId: Number(orgId), batchId: Number(batchId) }),
       });
       const body = await res.json();
 
