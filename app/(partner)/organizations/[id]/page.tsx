@@ -198,25 +198,22 @@ export default function OrganizationDetailPage() {
       </div>
 
       <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard title="Ventas totales" value={org.counts.totalSales} icon={Cart1Outlined} tone="blue" />
+        <StatCard title="Ventas totales" value={org.counts.totalSales} icon={Cart1Outlined} />
         <StatCard
           title="Ventas del mes"
           value={org.counts.salesThisMonth}
           subtitle={statsPeriodLabel}
           icon={Cart1Outlined}
-          tone="blue"
         />
         <StatCard
           title="Productos activos"
           value={org.counts.totalProducts}
           icon={BasketShopping3Outlined}
-          tone="blue"
         />
         <StatCard
           title="Clientes"
           value={org.counts.totalCustomers}
           icon={UserMultiple4Outlined}
-          tone="blue"
         />
       </div>
 
@@ -227,17 +224,15 @@ export default function OrganizationDetailPage() {
       <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
         <StatCard
           title="Crecimiento en ingresos"
-          value={org.incomeTrendPct !== null ? `${org.incomeTrendPct >= 0 ? "+" : ""}${org.incomeTrendPct}%` : "—"}
+          value={<TrendValue pct={org.incomeTrendPct} />}
           subtitle={`${statsPeriodLabel} vs mes anterior`}
           icon={DollarCircleOutlined}
-          tone={org.incomeTrendPct !== null && org.incomeTrendPct < 0 ? "blue" : "green"}
         />
         <StatCard
           title="Crecimiento en ganancia"
-          value={org.profitTrendPct !== null ? `${org.profitTrendPct >= 0 ? "+" : ""}${org.profitTrendPct}%` : "—"}
+          value={<TrendValue pct={org.profitTrendPct} />}
           subtitle={`${statsPeriodLabel} vs mes anterior`}
           icon={Wallet1Outlined}
-          tone={org.profitTrendPct !== null && org.profitTrendPct < 0 ? "blue" : "green"}
         />
       </div>
 
@@ -375,19 +370,15 @@ function ImpactBanner({
   return (
     <Card className="mt-6 p-5">
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-chip-green-bg">
-            <Lineicons icon={Rocket5Outlined} size={20} color="var(--chip-green)" />
-          </div>
-          <div>
-            <p className="flex items-center gap-1 text-sm font-medium text-muted-foreground">
-              Impacto desde que se unió a tu portafolio
-              <Tooltip content="Compara cuánto usaba la plataforma este negocio (ventas + transacciones por mes) antes de unirse a tu portafolio contra ahora. Nunca es dinero, solo actividad.">
-                <Lineicons icon={QuestionMarkCircleOutlined} size={14} className="cursor-default text-muted-foreground/70" />
-              </Tooltip>
-            </p>
-            <p className="mt-0.5 text-2xl font-extrabold tracking-tight">{headline}</p>
-          </div>
+        <div>
+          <p className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
+            <Lineicons icon={Rocket5Outlined} size={16} className="shrink-0 text-muted-foreground" />
+            Impacto desde que se unió a tu portafolio
+            <Tooltip content="Compara cuánto usaba la plataforma este negocio (ventas + transacciones por mes) antes de unirse a tu portafolio contra ahora. Nunca es dinero, solo actividad.">
+              <Lineicons icon={QuestionMarkCircleOutlined} size={14} className="cursor-default text-muted-foreground/70" />
+            </Tooltip>
+          </p>
+          <p className="mt-0.5 text-2xl font-extrabold tracking-tight">{headline}</p>
         </div>
         <TrendBadge pct={activityTrendPct} />
       </div>
@@ -412,6 +403,19 @@ function TrendBadge({ pct }: { pct: number | null }) {
       {pct >= 0 ? "+" : ""}
       {pct}% vs mes anterior
     </Badge>
+  );
+}
+
+// Valor de una StatCard de crecimiento — verde solo cuando el % es
+// positivo (el único color con significado real que queda en las cards,
+// ver feedback de diseño 2026-08-23: nada de íconos de colores variados).
+function TrendValue({ pct }: { pct: number | null }) {
+  if (pct === null) return "—";
+  return (
+    <span style={pct >= 0 ? { color: "var(--chip-green)" } : undefined}>
+      {pct >= 0 ? "+" : ""}
+      {pct}%
+    </span>
   );
 }
 

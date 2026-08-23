@@ -55,19 +55,20 @@ export default function ReportsPage() {
   const r = data.data;
 
   return (
-    <div>
-      <h1 className="mb-1 text-xl font-semibold">Reporte de adopción</h1>
-      <p className="mb-6 text-sm text-muted-foreground">{r.period}</p>
-
+    <div className="pt-4 sm:pt-5">
+      <div>
+        <h1 className="mb-1 text-xl font-semibold">Reporte de adopción</h1>
+        <p className="mb-6 text-sm text-muted-foreground">{r.period}</p>
+      </div>
+    
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard title="Inscritos" value={r.totalEnrolled} icon={UserMultiple4Outlined} tone="blue" />
-        <StatCard title="Activos" value={r.activeUsers} icon={User4Outlined} tone="green" />
-        <StatCard title="Tasa de adopción" value={`${r.adoptionRate}%`} icon={BarChart4Outlined} tone="blue" />
+        <StatCard title="Inscritos" value={r.totalEnrolled} icon={UserMultiple4Outlined} />
+        <StatCard title="Activos" value={r.activeUsers} icon={User4Outlined} />
+        <StatCard title="Tasa de adopción" value={`${r.adoptionRate}%`} icon={BarChart4Outlined} />
         <StatCard
           title="Recomendación"
           value={RECOMMENDATION_LABEL[r.recommendation]}
           icon={BarChart4Outlined}
-          tone={r.recommendation === "GOOD" ? "green" : "blue"}
         />
       </div>
 
@@ -101,21 +102,18 @@ export default function ReportsPage() {
             value={r.impact.beneficiaries}
             subtitle="Emprendimientos apoyados"
             icon={Briefcase1Outlined}
-            tone="blue"
           />
           <StatCard
             title="Ventas generadas"
             value={r.impact.salesTransactionsGenerated}
             subtitle="Histórico, todo el portafolio"
             icon={Cart1Outlined}
-            tone="green"
           />
           <StatCard
             title="Sectores beneficiados"
             value={r.impact.sectorsBenefited.length}
             subtitle="Industrias distintas en el portafolio"
             icon={Buildings1Outlined}
-            tone="blue"
           />
         </div>
 

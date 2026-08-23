@@ -79,6 +79,19 @@ function adoptionStatus(rate: number) {
   return { label: "Necesita atención", variant: "warning" as const };
 }
 
+// Valor de una StatCard de crecimiento — verde solo cuando el % es
+// positivo (el único color con significado real que queda en las cards,
+// ver feedback de diseño 2026-08-23: nada de íconos de colores variados).
+function TrendValue({ pct }: { pct: number | null }) {
+  if (pct === null) return "—";
+  return (
+    <span style={pct >= 0 ? { color: "var(--chip-green)" } : undefined}>
+      {pct >= 0 ? "+" : ""}
+      {pct}%
+    </span>
+  );
+}
+
 export default function DashboardPage() {
   // Meses/años con registros reales en el portafolio — ver lib/periods.ts.
   // Alimenta los selects de abajo para que el partner solo pueda elegir un
@@ -111,7 +124,7 @@ export default function DashboardPage() {
   usePageHeader(
     () =>
       data ? (
-        <div className="card-elevated rounded-2xl bg-card p-4 sm:p-5">
+        <div className="pt-4 sm:pt-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-3">
               <h1 className="text-xl font-semibold">Dashboard — {data.data.partner}</h1>
@@ -145,7 +158,7 @@ export default function DashboardPage() {
           TODAS las orgs (ver política de ética de datos financieros). */}
       <Card className="mb-4 flex flex-wrap items-center justify-between gap-3 p-5">
         <div>
-          <p className="flex items-center gap-1 text-sm font-medium text-muted-foreground">
+          <p className="flex items-center gap-1 text-md font-medium text-muted-foreground">
             Crecimiento en base a ingresos
             <Tooltip content="Compara cuánto vendió en total tu portafolio este mes contra el mes anterior. Si el número es positivo, tus emprendedores en conjunto vendieron más que el mes pasado.">
               <Lineicons icon={QuestionMarkCircleOutlined} size={14} className="cursor-default text-muted-foreground/70" />
@@ -157,7 +170,7 @@ export default function DashboardPage() {
               : "—"}
           </p>
         </div>
-        <p className="text-xs text-muted-foreground">{periodLabel} · todo el portafolio</p>
+        <p className="text-sm text-muted-foreground">{periodLabel} · todo el portafolio</p>
       </Card>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -170,7 +183,6 @@ export default function DashboardPage() {
           }
           subtitle={`${summary.orgsIncreasedSalesCount} de ${summary.totalOrganizations} emprendedores aumentaron ventas`}
           icon={Rocket5Outlined}
-          tone="green"
           info="De todos los emprendedores en tu portafolio, qué porcentaje vendió más este mes que el mes anterior."
         />
 
@@ -179,18 +191,13 @@ export default function DashboardPage() {
             antes/después que lib/impact.ts, alimentado con ganancia). */}
         <StatCard
           title="Crecimiento"
-          value={
-            summary.avgProfitGrowthPct !== null
-              ? `${summary.avgProfitGrowthPct >= 0 ? "+" : ""}${summary.avgProfitGrowthPct}%`
-              : "—"
-          }
+          value={<TrendValue pct={summary.avgProfitGrowthPct} />}
           subtitle={
             summary.profitGrowthOrgsCount > 0
               ? `Crecimiento en ganancia de ${summary.profitGrowthOrgsCount} emprendedor${summary.profitGrowthOrgsCount === 1 ? "" : "es"} desde que se unieron`
               : "Todavía no hay suficiente historial para medir crecimiento"
           }
           icon={TrendUp1Outlined}
-          tone={summary.avgProfitGrowthPct !== null && summary.avgProfitGrowthPct < 0 ? "blue" : "green"}
           info="Compara cuánto ganaban en promedio tus emprendedores antes de unirse a vos contra cuánto ganan ahora — mide el impacto de tu acompañamiento."
         />
 
@@ -206,9 +213,7 @@ export default function DashboardPage() {
                 <span className="min-w-0 truncate text-xl">{summary.topGrowthSector.industryName}</span>
                 <span
                   className="shrink-0 text-base font-bold"
-                  style={{
-                    color: summary.topGrowthSector.avgGrowthPct < 0 ? "var(--chip-blue)" : "var(--chip-green)",
-                  }}
+                  style={summary.topGrowthSector.avgGrowthPct >= 0 ? { color: "var(--chip-green)" } : undefined}
                 >
                   {summary.topGrowthSector.avgGrowthPct >= 0 ? "+" : ""}
                   {summary.topGrowthSector.avgGrowthPct}%
@@ -220,7 +225,6 @@ export default function DashboardPage() {
           }
           subtitle="Promedio de crecimiento en ganancia por sector"
           icon={Buildings1Outlined}
-          tone={summary.topGrowthSector && summary.topGrowthSector.avgGrowthPct < 0 ? "blue" : "green"}
           info="El rubro cuyos negocios, en promedio, más aumentaron su ganancia desde que se unieron a tu portafolio."
         />
 
@@ -245,10 +249,10 @@ export default function DashboardPage() {
           gate de share_financials: es solo un conteo de organizaciones por
           industria, no revela montos. */}
       <Card className="mt-4 p-5">
-        <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-full bg-chip-blue-bg">
-          <Lineicons icon={Buildings1Outlined} size={20} color="var(--chip-blue)" />
-        </div>
-        <p className="text-sm font-medium text-muted-foreground">Distribución por sector</p>
+        <p className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
+          <Lineicons icon={Buildings1Outlined} size={16} className="text-muted-foreground" />
+          Distribución por sector
+        </p>
 
         {sectorBreakdown.length === 0 ? (
           <p className="mt-3 text-sm text-muted-foreground">Todavía no hay emprendedores en tu portafolio.</p>
@@ -284,16 +288,14 @@ export default function DashboardPage() {
 function TopGrowthCard({ orgs }: { orgs: TopGrowthOrg[] }) {
   return (
     <Card className="p-5">
-      <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-full bg-chip-green-bg">
-        <Lineicons icon={TrendUp1Outlined} size={20} color="var(--chip-green)" />
-      </div>
-      <p className="flex items-center gap-1 text-sm font-medium text-muted-foreground">
+      <p className="flex items-center gap-1.5 text-md font-medium text-muted-foreground">
+        <Lineicons icon={TrendUp1Outlined} size={25} className="shrink-0 text-muted-foreground" />
         Emprendimientos en alza
         <Tooltip content="Los 3 negocios que más aumentaron su ganancia este mes comparado con el mes pasado.">
           <Lineicons icon={QuestionMarkCircleOutlined} size={14} className="cursor-default text-muted-foreground/70" />
         </Tooltip>
       </p>
-      <p className="text-xs text-muted-foreground">Ganancia del mes actual vs el anterior</p>
+      <p className="text-sm text-muted-foreground">Ganancia del mes actual vs el anterior</p>
 
       {orgs.length === 0 ? (
         <p className="mt-3 text-sm text-muted-foreground">Todavía no hay suficiente historial para rankear.</p>
@@ -335,23 +337,21 @@ function TransactionsCard({
 }) {
   return (
     <Card className="p-5 sm:col-span-2 lg:col-span-1">
-      <div className="mb-4 flex items-center justify-between">
-        <div className="flex h-11 w-11 items-center justify-center rounded-full bg-chip-blue-bg">
-          <Lineicons icon={UserMultiple4Outlined} size={20} color="var(--chip-blue)" />
-        </div>
+      <div className="flex items-center justify-between gap-2">
+        <p className="flex items-center gap-1.5 text-md font-medium text-muted-foreground">
+          <Lineicons icon={UserMultiple4Outlined} size={25} className="shrink-0 text-muted-foreground" />
+          Transacciones
+          <Tooltip content="Cantidad de ventas registradas este mes por todos los emprendedores de tu portafolio.">
+            <Lineicons icon={QuestionMarkCircleOutlined} size={14} className="cursor-default text-muted-foreground/70" />
+          </Tooltip>
+        </p>
         <Badge variant="muted">{summary.adoptionRate}% adopción</Badge>
       </div>
-      <p className="flex items-center gap-1 text-sm font-medium text-muted-foreground">
-        Transacciones
-        <Tooltip content="Cantidad de ventas registradas este mes por todos los emprendedores de tu portafolio.">
-          <Lineicons icon={QuestionMarkCircleOutlined} size={14} className="cursor-default text-muted-foreground/70" />
-        </Tooltip>
-      </p>
       <p className="mt-1 text-3xl font-extrabold tracking-tight">{summary.transactionsThisMonth}</p>
-      <p className="mt-1 text-xs text-muted-foreground">{periodLabel}, todo el portafolio</p>
+      <p className="mt-1 text-sm text-muted-foreground">{periodLabel}, todo el portafolio</p>
 
       <div className="mt-4 border-t border-border pt-3">
-        <p className="flex items-center gap-1 text-xs font-semibold text-muted-foreground">
+        <p className="flex items-center gap-1 text-md font-semibold text-muted-foreground">
           Adopción
           <Tooltip content="Qué tan seguido usa la plataforma cada negocio. Se ordenan del que vendió más recientemente al que tiene más tiempo sin usarla.">
             <Lineicons icon={QuestionMarkCircleOutlined} size={12} className="cursor-default text-muted-foreground/70" />
@@ -389,10 +389,10 @@ function PortfolioStatusCard({
 }) {
   return (
     <Card className="p-5 sm:col-span-2 lg:col-span-1">
-      <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-full bg-chip-blue-bg">
-        <Lineicons icon={User4Outlined} size={20} color="var(--chip-blue)" />
-      </div>
-      <p className="text-sm font-medium text-muted-foreground">Estado del portafolio</p>
+      <p className="flex items-center gap-1.5 text-md font-medium text-muted-foreground">
+        <Lineicons icon={User4Outlined} size={25} className="text-muted-foreground" />
+        Estado del portafolio
+      </p>
 
       {/* Semáforo verde/amarillo/rojo por severidad — igual criterio que
           ACTIVE_DAYS/DORMANT_DAYS en /api/partner/dashboard (30/90 días). */}

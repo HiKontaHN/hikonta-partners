@@ -121,7 +121,7 @@ export default function SubscriptionsPage() {
 
   return (
     <div>
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-2">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-2 pt-4 sm:pt-5">
         <div>
           <h1 className="text-xl font-semibold">Suscripciones</h1>
           <p className="text-sm text-muted-foreground">
@@ -142,14 +142,12 @@ export default function SubscriptionsPage() {
           value={summary ? summary.activeCount : "—"}
           subtitle={summary ? `de ${summary.totalCount} en tu portafolio` : undefined}
           icon={Crown3Outlined}
-          tone="green"
         />
         <StatCard
           title="Historial de patrocinios"
           value={paymentsData ? `${paymentsData.lifetime.totalMonths} meses` : "—"}
           subtitle={paymentsData ? `$${paymentsData.lifetime.totalUsd.toFixed(2)} pagados en total` : undefined}
           icon={Wallet1Outlined}
-          tone="blue"
         />
         <div className="col-span-2 sm:col-span-1">
           <StatCard
@@ -157,7 +155,6 @@ export default function SubscriptionsPage() {
             value={creditsData ? creditsData.totals.pending : "—"}
             subtitle={creditsData ? `${creditsData.totals.claimed} ya asignadas` : undefined}
             icon={Ticket1Outlined}
-            tone="blue"
           />
         </div>
       </div>
