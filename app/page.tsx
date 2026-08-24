@@ -146,15 +146,16 @@ export default function LandingPage() {
             <ThemeToggle collapsed />
             <Link
               href="/login"
-              className="hidden text-sm font-semibold text-foreground hover:text-primary sm:block"
+              className="text-sm font-semibold text-foreground hover:text-primary"
             >
               Iniciar sesión
             </Link>
             <Link
               href="/register"
-              className="flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-sm font-bold text-primary-foreground sm:px-5 sm:py-2.5"
+              className="flex items-center gap-1.5 whitespace-nowrap rounded-full bg-primary px-3 py-2 text-sm font-bold text-primary-foreground sm:px-5 sm:py-2.5"
             >
-              Solicitar demo
+              <span className="sm:hidden">Demo</span>
+              <span className="hidden sm:inline">Solicitar demo</span>
             </Link>
           </div>
         </div>
@@ -404,6 +405,12 @@ export default function LandingPage() {
               Parte del ecosistema HiKonta — gestión de inventario, ventas y finanzas para
               pequeños negocios.
             </p>
+            <a
+              href="mailto:hikonta.app@gmail.com"
+              className="mt-3 inline-block text-sm font-semibold text-foreground transition-colors hover:text-primary"
+            >
+              hikonta.app@gmail.com
+            </a>
           </div>
 
           <div className="grid grid-cols-2 gap-8 sm:flex sm:gap-16">
