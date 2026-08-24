@@ -61,13 +61,10 @@ export async function POST(request: NextRequest) {
     for (let attempt = 0; attempt < 5; attempt++) {
       const code = generateInviteCode();
       try {
-        // `|| null` en vez de auth.data.userId directo: en modo BYPASS_AUTH
-        // (ver lib/auth.ts) userId es 0, un id que no existe en `users` —
-        // insertarlo tal cual violaría la FK created_by_user_id.
         const [row] = await sql`
           INSERT INTO partner_invite_codes (partner_id, code, created_by_user_id, expires_at)
           VALUES (
-            ${auth.data.partnerId}, ${code}, ${auth.data.userId || null},
+            ${auth.data.partnerId}, ${code}, ${auth.data.userId},
             NOW() + INTERVAL '1 day' * ${INVITE_CODE_DEFAULT_EXPIRY_DAYS}
           )
           RETURNING id, code, expires_at, created_at

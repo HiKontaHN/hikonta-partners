@@ -20,6 +20,7 @@ import {
   XmarkOutlined,
   HourglassOutlined,
   ChevronLeftOutlined,
+  Locked1Outlined,
 } from "@lineiconshq/free-icons";
 
 // "Actividad" (feed de eventos) se sacó del panel — quedaba redundante con
@@ -35,7 +36,7 @@ const NAV = [
 const SIDEBAR_COLLAPSED_KEY = "hikonta-partners:sidebar-collapsed";
 
 export default function PartnerLayout({ children }: { children: React.ReactNode }) {
-  const { me, loading, pending, signOut } = useAuth();
+  const { me, loading, pending, notPartner, firebaseUser, emailVerified, signOut } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
   const [navOpen, setNavOpen] = useState(false);
@@ -52,10 +53,24 @@ export default function PartnerLayout({ children }: { children: React.ReactNode 
   }, [collapsed]);
 
   useEffect(() => {
-    // "pending" es sesión válida sin acceso todavía — no es "sin sesión",
-    // así que NO se manda a /login (evitaría un loop /login ↔ /dashboard).
-    if (!loading && !me && !pending) router.replace("/login");
-  }, [loading, me, pending, router]);
+    if (loading) return;
+    // Correo sin verificar: se revisa antes que "pending" — un partner
+    // recién registrado ya tiene sesión válida y su fila en `partners`
+    // (is_active = FALSE), así que /api/partner/me también daría 403 acá,
+    // pero el paso que le toca primero es confirmar el correo, no esperar
+    // la aprobación del admin.
+    if (firebaseUser && !emailVerified) {
+      router.replace("/verify-email");
+      return;
+    }
+    // "pending" y "notPartner" son sesión de Firebase válida sin acceso —
+    // no son "sin sesión", así que NO se mandan a /login: con el token
+    // verificándose de verdad en proxy.ts, un firebaseUser real ahí
+    // redirige de vuelta para acá (isPublic + token válido) y se arma un
+    // loop. Ambos casos se resuelven quedándose acá, con su propia
+    // pantalla más abajo.
+    if (!me && !pending && !notPartner) router.replace("/login");
+  }, [loading, me, pending, notPartner, firebaseUser, emailVerified, router]);
 
   // Cierra el drawer al cambiar de ruta (mobile)
   useEffect(() => {
@@ -66,6 +81,41 @@ export default function PartnerLayout({ children }: { children: React.ReactNode 
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <Spinner size={24} />
+      </div>
+    );
+  }
+
+  if (firebaseUser && !emailVerified) return null; // redirigiendo a /verify-email
+
+  // Cuenta de Firebase válida (mismo proyecto que yelifin-sistema) sin
+  // ninguna fila en `partners` — ej. un emprendedor. No es "pendiente",
+  // no tiene nada que ver con este panel. El login normal ya corta esto
+  // antes de llegar acá (ver app/login/page.tsx); esto es la red por si
+  // se llega igual (sesión vieja, navegación directa, etc.).
+  if (notPartner) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background px-6 text-center">
+        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-destructive/10">
+          <Lineicons icon={Locked1Outlined} size={26} color="var(--destructive)" />
+        </div>
+        <div>
+          <h1 className="text-lg font-extrabold tracking-tight">Sin acceso a este panel</h1>
+          <p className="mx-auto mt-1.5 max-w-sm text-sm text-muted-foreground">
+            Esta cuenta no está registrada como partner de HiKonta. Si sos coordinador de una
+            incubadora o aceleradora, registrala desde{" "}
+            <Link href="/register" className="font-semibold text-primary">
+              acá
+            </Link>
+            .
+          </p>
+        </div>
+        <button
+          onClick={() => signOut()}
+          className="mt-2 flex items-center gap-2 rounded-full bg-muted px-4 py-2 text-sm font-semibold text-foreground hover:bg-secondary"
+        >
+          <Lineicons icon={ExitOutlined} size={16} />
+          Cerrar sesión
+        </button>
       </div>
     );
   }

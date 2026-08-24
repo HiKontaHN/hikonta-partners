@@ -20,26 +20,6 @@ type AuthResult =
   | { error: string; status: number; data: null; reason?: AuthErrorReason }
   | { error: null; status: 200; data: PartnerUser };
 
-// ── BYPASS TEMPORAL (solo para ver el panel sin login) ─────────────────
-// Activado con NEXT_PUBLIC_BYPASS_AUTH=true en .env.local.
-// ⚠️ Cuando esté activo, TODAS las rutas /api/partner/* devuelven datos
-// de un partner falso sin validar ningún token — no debe llegar a
-// producción así. Apaga la variable (o bórrala) para reactivar el login
-// real. El partnerId usado es configurable con NEXT_PUBLIC_BYPASS_PARTNER_ID
-// (por defecto 1) — debe existir esa fila en `partners` para ver datos reales;
-// si no existe, los endpoints simplemente devuelven listas vacías.
-const BYPASS_AUTH = process.env.NEXT_PUBLIC_BYPASS_AUTH === "true";
-const BYPASS_PARTNER_ID = Number(process.env.NEXT_PUBLIC_BYPASS_PARTNER_ID ?? "1");
-
-const BYPASS_USER: PartnerUser = {
-  userId: 0,
-  partnerId: BYPASS_PARTNER_ID,
-  partnerName: "Partner de prueba",
-  firebaseUid: "bypass",
-  email: "dev@hikonta.local",
-  displayName: "Modo sin autenticación",
-};
-
 // ── verifyPartner ─────────────────────────────────────────────────────
 // Análogo a verifyAdmin() en yelifin-sistema: valida el Firebase JWT y
 // resuelve la identidad contra `partners.user_id`, NO contra
@@ -47,10 +27,6 @@ const BYPASS_USER: PartnerUser = {
 // plataforma, no un miembro de ninguna organización.
 
 export async function verifyPartner(request: NextRequest): Promise<AuthResult> {
-  if (BYPASS_AUTH) {
-    return { error: null, status: 200, data: BYPASS_USER };
-  }
-
   const authHeader = request.headers.get("Authorization");
 
   if (!authHeader?.startsWith("Bearer ")) {

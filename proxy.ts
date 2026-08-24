@@ -28,24 +28,33 @@ async function verifyFirebaseToken(
       atob(payloadB64.replace(/-/g, "+").replace(/_/g, "/"))
     );
 
+    const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
     const now = Math.floor(Date.now() / 1000);
     if (!payload.exp || payload.exp < now) return { valid: false };
-    if (payload.aud !== process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID) return { valid: false };
+    if (payload.aud !== projectId) return { valid: false };
+    if (payload.iss !== `https://securetoken.google.com/${projectId}`) return { valid: false };
 
+    // JWK, no PEM/X.509 — el endpoint de certificados x509 (usado antes acá)
+    // da un certificado completo, que NO es una estructura SPKI válida:
+    // crypto.subtle.importKey("spki", ...) sobre eso fallaba SIEMPRE, para
+    // cualquier token, incluso uno legítimo (bug real, confirmado con un
+    // token real — quedaba enmascarado por NEXT_PUBLIC_BYPASS_AUTH). Este
+    // otro endpoint de Firebase da la misma clave pública pero ya en
+    // formato JWK, que Web Crypto sí puede importar directo, sin parsear
+    // PEM/DER a mano.
     const keysRes = await fetch(
-      "https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com",
+      "https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com",
       { next: { revalidate: 3600 } }
     );
     if (!keysRes.ok) return { valid: false };
 
-    const keys = await keysRes.json();
-    const certPem = keys[header.kid];
-    if (!certPem) return { valid: false };
+    const { keys } = (await keysRes.json()) as { keys: (JsonWebKey & { kid: string })[] };
+    const jwk = keys.find((k) => k.kid === header.kid);
+    if (!jwk) return { valid: false };
 
-    const certDer = pemToDer(certPem);
     const cryptoKey = await crypto.subtle.importKey(
-      "spki",
-      certDer,
+      "jwk",
+      jwk,
       { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
       false,
       ["verify"]
@@ -62,17 +71,6 @@ async function verifyFirebaseToken(
   }
 }
 
-function pemToDer(pem: string): ArrayBuffer {
-  const base64 = pem
-    .replace(/-----BEGIN CERTIFICATE-----/, "")
-    .replace(/-----END CERTIFICATE-----/, "")
-    .replace(/\s/g, "");
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes.buffer;
-}
-
 function base64UrlDecode(str: string): ArrayBuffer {
   const base64 = str.replace(/-/g, "+").replace(/_/g, "/");
   const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), "=");
@@ -82,13 +80,7 @@ function base64UrlDecode(str: string): ArrayBuffer {
   return bytes.buffer;
 }
 
-// ⚠️ BYPASS TEMPORAL — ver nota en lib/auth.ts. Con esto activo, el
-// middleware deja pasar cualquier ruta sin pedir sesión.
-const BYPASS_AUTH = process.env.NEXT_PUBLIC_BYPASS_AUTH === "true";
-
 export async function proxy(request: NextRequest) {
-  if (BYPASS_AUTH) return NextResponse.next();
-
   const { pathname } = request.nextUrl;
 
   // ── Rate limit global para toda la API ─────────────────────────────
@@ -124,20 +116,17 @@ export async function proxy(request: NextRequest) {
   // "/" es match exacto — con startsWith solo, matchearía cualquier ruta.
   const isPublic = PUBLIC_PATHS.some((p) => (p === "/" ? pathname === "/" : pathname.startsWith(p)));
 
-  // Portado de proxy.ts en hikonta-admin: sin cookie o token inválido,
-  // DEJAR PASAR (NextResponse.next()), no redirigir duro. Este gate de Edge
-  // runtime no es la capa de seguridad real — no puede serlo,
-  // verifyFirebaseToken() de acá arriba usa
-  // crypto.subtle.importKey("spki", ...) sobre el DER de un certificado
-  // X.509 completo, que NO es una estructura SPKI válida — falla siempre,
-  // para cualquier token, incluso uno perfectamente legítimo. Antes esto
-  // redirigía duro a /login cuando el token no era "válido", lo que
-  // significa que CUALQUIER navegación directa o refresh de una ruta
-  // protegida (con sesión real y cookie real) rebotaba a /login — bug
-  // dormido hoy porque NEXT_PUBLIC_BYPASS_AUTH está activo en dev y se
-  // saltea todo este archivo. La identidad real se valida en cada API route
-  // vía verifyPartner() (firebase-admin, runtime Node, sin este bug) y en
-  // el cliente vía useAuth() + el redirect de app/(partner)/layout.tsx.
+  // Sin cookie o token inválido, DEJAR PASAR (NextResponse.next()), no
+  // redirigir duro. verifyFirebaseToken() ya valida de verdad (ver el fix
+  // JWK arriba), pero este gate de Edge sigue sin ser la capa de
+  // seguridad real — es solo una optimización (evita servir /dashboard
+  // sin sesión, redirige a "ya logueado" en /login y /register). Si acá
+  // se redirigiera duro a /login ante cualquier fallo (ej. el fetch a
+  // Google caído, o un cold start sin la cache de 1h de las keys), un
+  // usuario con sesión real quedaría en loop hacia /login. La identidad
+  // real — la que de verdad importa — se valida en cada API route vía
+  // verifyPartner() (firebase-admin, runtime Node) y en el cliente vía
+  // useAuth() + el redirect de app/(partner)/layout.tsx.
   if (!token) return NextResponse.next();
 
   const result = await verifyFirebaseToken(token);
