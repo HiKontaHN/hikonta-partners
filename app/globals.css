@@ -167,4 +167,38 @@
   .card-elevated:hover {
     box-shadow: var(--shadow-card-hover);
   }
+
+  /* Franja de beneficios de la landing — mismo patrón que
+     landing-module-strip.tsx en yelifin-sistema (loop continuo, se
+     pausa al pasar el mouse). */
+  .landing-marquee {
+    animation: landing-marquee 26s linear infinite;
+  }
+  .landing-marquee:hover {
+    animation-play-state: paused;
+  }
+
+  /* Difumina las orillas de la imagen del hero para que no se note el
+     borde cuadrado del PNG. farthest-corner asegura que el gradiente
+     llegue hasta la esquina más lejana (cubre todo el rectángulo, no
+     solo un círculo inscripto) — así el fundido queda solo en el margen
+     exterior y no corta contenido real de la imagen (ver captura
+     2026-08-23: con un radio más chico el corte cruzaba un panel). */
+  .hero-image-fade {
+    -webkit-mask-image: radial-gradient(ellipse farthest-corner at 50% 50%, black 82%, transparent 100%);
+    mask-image: radial-gradient(ellipse farthest-corner at 50% 50%, black 82%, transparent 100%);
+  }
+}
+
+@keyframes landing-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    /* Avanza exactamente el ancho de un set repetido: 1 / --marquee-repeat
+       del track. --marquee-repeat lo fija inline el componente que use
+       esta animación — si no coincide con la cantidad de veces que repite
+       su contenido, el loop se ve saltar/reiniciar. */
+    transform: translateX(calc(-100% / var(--marquee-repeat, 2)));
+  }
 }

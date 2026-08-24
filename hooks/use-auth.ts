@@ -25,24 +25,12 @@ class MeError extends Error {
 
 const ME_KEY = "/api/partner/me";
 
-// ⚠️ BYPASS TEMPORAL — ver nota en lib/auth.ts. Con esto activo se salta
-// Firebase por completo: token/me quedan fijos, sin pedir login.
-const BYPASS_AUTH = process.env.NEXT_PUBLIC_BYPASS_AUTH === "true";
-const BYPASS_ME: PartnerMe = {
-  partnerId: Number(process.env.NEXT_PUBLIC_BYPASS_PARTNER_ID ?? "1"),
-  partnerName: "Partner de prueba",
-  email: "dev@hikonta.local",
-  displayName: "Modo sin autenticación",
-};
-
 export function useAuth() {
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
-  const [token, setToken] = useState<string | null>(BYPASS_AUTH ? "bypass" : null);
-  const [firebaseLoading, setFirebaseLoading] = useState(!BYPASS_AUTH);
+  const [token, setToken] = useState<string | null>(null);
+  const [firebaseLoading, setFirebaseLoading] = useState(true);
 
   useEffect(() => {
-    if (BYPASS_AUTH) return; // no toca Firebase en modo bypass
-
     const unsubscribe = onIdTokenChanged(auth, async (fbUser) => {
       setFirebaseUser(fbUser);
       if (fbUser) {
@@ -59,7 +47,7 @@ export function useAuth() {
   }, []);
 
   const { data: me, error: meError, isLoading: meLoading } = useSWR<{ data: PartnerMe }>(
-    !BYPASS_AUTH && token ? ME_KEY : null,
+    token ? ME_KEY : null,
     async (url: string) => {
       const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
       if (!res.ok) {
@@ -78,22 +66,32 @@ export function useAuth() {
   );
 
   async function signOut() {
-    if (BYPASS_AUTH) return;
     await fbSignOut(auth);
   }
 
-  // Sesión de Firebase válida, pero sin acceso todavía (partner recién
-  // registrado esperando aprobación, o cuenta deshabilitada). Se distingue
-  // de "no autenticado" para no mandarlo de vuelta a /login en loop.
-  const pending = !BYPASS_AUTH && meError instanceof MeError && meError.status === 403;
+  // Sesión de Firebase válida, pero sin acceso todavía porque el partner
+  // espera aprobación (o está deshabilitado) — reason "PENDING_APPROVAL".
+  // Se distingue de "no autenticado" para no mandarlo de vuelta a /login
+  // en loop, y de "notPartner" de abajo: acá SÍ tiene fila en `partners`,
+  // solo que is_active = FALSE.
+  const pending =
+    meError instanceof MeError && meError.status === 403 && meError.reason === "PENDING_APPROVAL";
+
+  // Cuenta de Firebase válida (ej. un emprendedor de yelifin-sistema —
+  // mismo proyecto de Firebase) que nunca se registró como partner acá.
+  // No tiene fila en `partners` en absoluto — no es "pendiente", es que
+  // esta cuenta no tiene nada que ver con este panel.
+  const notPartner =
+    meError instanceof MeError && meError.status === 403 && meError.reason === "NOT_PARTNER";
 
   return {
     firebaseUser,
     token,
-    me: BYPASS_AUTH ? BYPASS_ME : (me?.data ?? null),
+    me: me?.data ?? null,
     pending,
-    loading: BYPASS_AUTH ? false : firebaseLoading || (!!token && meLoading),
-    bypassing: BYPASS_AUTH,
+    notPartner,
+    emailVerified: firebaseUser?.emailVerified ?? false,
+    loading: firebaseLoading || (!!token && meLoading),
     signOut,
   };
 }
