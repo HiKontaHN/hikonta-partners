@@ -42,11 +42,12 @@ export async function GET(request: NextRequest) {
           i.name          AS industry_name,
           os.status       AS subscription_status,
           sp.name         AS plan_name,
-          (SELECT COUNT(*) FROM sales s WHERE s.org_id = o.id
+          -- COMPLETED solamente, igual que "ventas este mes" en yelifin-sistema.
+          (SELECT COUNT(*) FROM sales s WHERE s.org_id = o.id AND s.status = 'COMPLETED'
              AND DATE_TRUNC('month', s.sold_at) = DATE_TRUNC('month', ${periodStart}::date)) AS sales_this_month,
-          (SELECT COALESCE(SUM(total), 0) FROM sales s WHERE s.org_id = o.id
+          (SELECT COALESCE(SUM(total), 0) FROM sales s WHERE s.org_id = o.id AND s.status = 'COMPLETED'
              AND DATE_TRUNC('month', s.sold_at) = DATE_TRUNC('month', ${periodStart}::date)) AS income_this_month,
-          (SELECT COALESCE(SUM(total), 0) FROM sales s WHERE s.org_id = o.id
+          (SELECT COALESCE(SUM(total), 0) FROM sales s WHERE s.org_id = o.id AND s.status = 'COMPLETED'
              AND DATE_TRUNC('month', s.sold_at) = DATE_TRUNC('month', ${periodStart}::date - INTERVAL '1 month')) AS income_last_month,
           GREATEST(
             COALESCE((SELECT MAX(sold_at)     FROM sales        WHERE org_id = o.id), o.created_at),

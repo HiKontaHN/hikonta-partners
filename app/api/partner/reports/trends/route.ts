@@ -57,11 +57,14 @@ export async function GET(request: NextRequest) {
         -- política de ética de datos financieros), así que sumar sobre el
         -- valor real de TODAS las orgs no revela nada — más abajo se
         -- convierte a % de variación antes de salir de este endpoint.
+        -- status = 'COMPLETED' para que este % cuadre con lo que ve cada
+        -- emprendedor en su propio dashboard (yelifin-sistema siempre
+        -- filtra a solo ventas completadas antes de sumar).
         SELECT m.month_start, COALESCE(SUM(s.total), 0) AS income
         FROM months m
         JOIN portfolio p ON p.linked_at < m.month_start + INTERVAL '1 month'
         LEFT JOIN sales s
-          ON s.org_id = p.id
+          ON s.org_id = p.id AND s.status = 'COMPLETED'
           AND s.sold_at >= m.month_start AND s.sold_at < m.month_start + INTERVAL '1 month'
         GROUP BY m.month_start
       )

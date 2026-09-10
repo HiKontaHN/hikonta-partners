@@ -20,7 +20,10 @@ const TOP_GROWTH_COUNT = 3;
 // proporcional a esa línea. MISMA fórmula que organizations/[id]/route.ts
 // (period_profit) y que "Ventas vs Ganancias" en yelifin-sistema — no
 // duplicar la lógica con una fórmula distinta rompería la consistencia
-// entre el detalle de una org y el agregado del portafolio.
+// entre el detalle de una org y el agregado del portafolio. Cada caller de
+// abajo filtra `s.status = 'COMPLETED'` — igual que yelifin-sistema filtra
+// siempre antes de sumar — para que el % que ve el partner cuadre con el
+// ingreso/ganancia real que ve el emprendedor en su propio dashboard.
 const PROFIT_LINE_EXPR = `
   si.line_total
   - (si.unit_cost * si.quantity)
@@ -104,6 +107,7 @@ export async function GET(request: NextRequest) {
       FROM months m
       LEFT JOIN sales s
         ON s.org_id IN (SELECT org_id FROM partner_organizations WHERE partner_id = ${auth.data.partnerId})
+        AND s.status = 'COMPLETED'
         AND s.sold_at >= m.month_start AND s.sold_at < m.month_start + INTERVAL '1 month'
       GROUP BY m.month_start
       ORDER BY m.month_start DESC
@@ -133,26 +137,26 @@ export async function GET(request: NextRequest) {
         COALESCE((
           SELECT SUM(${sql.unsafe(PROFIT_LINE_EXPR)})
           FROM sales s JOIN sale_items si ON si.sale_id = s.id AND si.org_id = s.org_id
-          WHERE s.org_id = o.id AND s.sold_at >= o.created_at AND s.sold_at < po.linked_at
+          WHERE s.org_id = o.id AND s.status = 'COMPLETED' AND s.sold_at >= o.created_at AND s.sold_at < po.linked_at
         ), 0) AS profit_before,
         COALESCE((
           SELECT SUM(${sql.unsafe(PROFIT_LINE_EXPR)})
           FROM sales s JOIN sale_items si ON si.sale_id = s.id AND si.org_id = s.org_id
-          WHERE s.org_id = o.id AND s.sold_at >= po.linked_at
+          WHERE s.org_id = o.id AND s.status = 'COMPLETED' AND s.sold_at >= po.linked_at
         ), 0) AS profit_after,
-        COALESCE((SELECT SUM(total) FROM sales s WHERE s.org_id = o.id
+        COALESCE((SELECT SUM(total) FROM sales s WHERE s.org_id = o.id AND s.status = 'COMPLETED'
           AND DATE_TRUNC('month', s.sold_at) = DATE_TRUNC('month', ${periodStart}::date)), 0) AS income_this_month,
-        COALESCE((SELECT SUM(total) FROM sales s WHERE s.org_id = o.id
+        COALESCE((SELECT SUM(total) FROM sales s WHERE s.org_id = o.id AND s.status = 'COMPLETED'
           AND DATE_TRUNC('month', s.sold_at) = DATE_TRUNC('month', ${periodStart}::date - INTERVAL '1 month')), 0) AS income_last_month,
         COALESCE((
           SELECT SUM(${sql.unsafe(PROFIT_LINE_EXPR)})
           FROM sales s JOIN sale_items si ON si.sale_id = s.id AND si.org_id = s.org_id
-          WHERE s.org_id = o.id AND DATE_TRUNC('month', s.sold_at) = DATE_TRUNC('month', ${periodStart}::date)
+          WHERE s.org_id = o.id AND s.status = 'COMPLETED' AND DATE_TRUNC('month', s.sold_at) = DATE_TRUNC('month', ${periodStart}::date)
         ), 0) AS profit_this_month,
         COALESCE((
           SELECT SUM(${sql.unsafe(PROFIT_LINE_EXPR)})
           FROM sales s JOIN sale_items si ON si.sale_id = s.id AND si.org_id = s.org_id
-          WHERE s.org_id = o.id AND DATE_TRUNC('month', s.sold_at) = DATE_TRUNC('month', ${periodStart}::date - INTERVAL '1 month')
+          WHERE s.org_id = o.id AND s.status = 'COMPLETED' AND DATE_TRUNC('month', s.sold_at) = DATE_TRUNC('month', ${periodStart}::date - INTERVAL '1 month')
         ), 0) AS profit_last_month
       FROM organizations o
       JOIN partner_organizations po ON po.org_id = o.id AND po.partner_id = ${auth.data.partnerId}
@@ -256,11 +260,13 @@ export async function GET(request: NextRequest) {
       .map((o) => ({ id: o.id, name: o.name, growthPct: o.monthProfitGrowthPct as number }));
 
     // Volumen de transacciones (conteo, no monto — no requiere opt-in
-    // financiero, un conteo no revela cuánto factura nadie).
+    // financiero, un conteo no revela cuánto factura nadie). COMPLETED
+    // solamente, igual que "ventas este mes" en yelifin-sistema.
     const [txCount] = await sql`
       SELECT COUNT(*)::int AS count
       FROM sales s
       WHERE s.org_id IN (SELECT org_id FROM partner_organizations WHERE partner_id = ${auth.data.partnerId})
+        AND s.status = 'COMPLETED'
         AND DATE_TRUNC('month', s.sold_at) = DATE_TRUNC('month', ${periodStart}::date)
     `;
 

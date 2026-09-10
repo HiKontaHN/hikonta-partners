@@ -77,7 +77,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         (SELECT COUNT(*) FROM sales        WHERE org_id = ${orgId}) AS total_sales,
         (SELECT COUNT(*) FROM products     WHERE org_id = ${orgId} AND is_active = TRUE) AS total_products,
         (SELECT COUNT(*) FROM customers    WHERE org_id = ${orgId}) AS total_customers,
-        (SELECT COUNT(*) FROM sales WHERE org_id = ${orgId}
+        -- COMPLETED solamente, igual que "ventas este mes" en yelifin-sistema
+        -- (PENDING/CANCELLED no cuentan como venta real para el emprendedor).
+        (SELECT COUNT(*) FROM sales WHERE org_id = ${orgId} AND status = 'COMPLETED'
            AND DATE_TRUNC('month', sold_at) = DATE_TRUNC('month', ${statsPeriod.periodStart}::date)) AS sales_this_month
     `;
 
@@ -170,6 +172,12 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     // s.total por cada línea de venta. `unit`/`unitPlural` salen de
     // PERIOD_PRESETS (whitelist arriba), nunca del query string directo —
     // es seguro concatenarlos en el SQL.
+    // `s.status = 'COMPLETED'` en ambas CTEs: yelifin-sistema (lo que ve el
+    // emprendedor en su propio dashboard) SIEMPRE filtra a solo ventas
+    // completadas antes de sumar (ver app/api/dashboard/route.ts ahí). Sin
+    // este filtro acá, ventas PENDING/CANCELLED se sumaban también y el %
+    // que veía el partner no cuadraba con el ingreso/ganancia real del
+    // emprendedor.
     const financialRows = await sql`
       WITH periods AS (
         SELECT date_trunc(${period.unit}, now()) - (n || ' ' || ${period.unitPlural})::interval AS period_start
@@ -178,7 +186,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       period_income AS (
         SELECT p.period_start, COALESCE(SUM(s.total), 0) AS income
         FROM periods p
-        LEFT JOIN sales s ON s.org_id = ${orgId}
+        LEFT JOIN sales s ON s.org_id = ${orgId} AND s.status = 'COMPLETED'
           AND s.sold_at >= p.period_start AND s.sold_at < p.period_start + ('1 ' || ${period.unitPlural})::interval
         GROUP BY p.period_start
       ),
@@ -196,7 +204,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
             )
         ), 0) AS profit
         FROM periods p
-        LEFT JOIN sales s ON s.org_id = ${orgId}
+        LEFT JOIN sales s ON s.org_id = ${orgId} AND s.status = 'COMPLETED'
           AND s.sold_at >= p.period_start AND s.sold_at < p.period_start + ('1 ' || ${period.unitPlural})::interval
         LEFT JOIN sale_items si ON si.sale_id = s.id AND si.org_id = s.org_id
         GROUP BY p.period_start
@@ -244,7 +252,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         COALESCE(SUM(total) FILTER (WHERE DATE_TRUNC('month', sold_at) = DATE_TRUNC('month', ${statsPeriod.periodStart}::date)), 0) AS this_month,
         COALESCE(SUM(total) FILTER (WHERE DATE_TRUNC('month', sold_at) = DATE_TRUNC('month', ${statsPeriod.periodStart}::date - INTERVAL '1 month')), 0) AS last_month
       FROM sales
-      WHERE org_id = ${orgId}
+      WHERE org_id = ${orgId} AND status = 'COMPLETED'
     `;
     const [monthProfitStats] = await sql`
       SELECT
@@ -258,7 +266,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
           ELSE 0 END), 0) AS last_month
       FROM sales s
       LEFT JOIN sale_items si ON si.sale_id = s.id AND si.org_id = s.org_id
-      WHERE s.org_id = ${orgId}
+      WHERE s.org_id = ${orgId} AND s.status = 'COMPLETED'
     `;
     const incomeThisMonthNum = Number(monthIncomeStats.this_month);
     const incomeLastMonthNum = Number(monthIncomeStats.last_month);

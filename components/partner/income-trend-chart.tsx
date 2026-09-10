@@ -57,6 +57,11 @@ export function IncomeTrendChart({
   granularity?: "month" | "day";
 }) {
   const data = months.map((m) => ({ ...m, label: formatPeriod(m.month, granularity) }));
+  // Puede pasar que TODOS los puntos sean null: orgs nuevas sin ingresos en
+  // el período anterior a ninguno de los meses mostrados (pctChange nunca
+  // inventa un % contra una base en 0, ver lib/growth.ts). Sin este chequeo
+  // el gráfico se renderiza vacío sin explicación — parece roto.
+  const hasData = data.some((d) => d.income !== null || (showProfit && d.profit !== null));
   const periodWord = granularity === "day" ? "días" : "meses";
   const defaultTitle =
     mode === "percent"
@@ -82,64 +87,72 @@ export function IncomeTrendChart({
         {note && <p className="text-xs text-muted-foreground">{note}</p>}
       </CardHeader>
       <CardContent className="h-72 pt-4">
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={{ top: 8, right: 12, left: -12, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-            <XAxis
-              dataKey="label"
-              tick={{ fill: "var(--muted-foreground)", fontSize: 12 }}
-              axisLine={{ stroke: "var(--border)" }}
-              tickLine={false}
-            />
-            <YAxis
-              width={64}
-              tickFormatter={formatAxis}
-              tick={{ fill: "var(--muted-foreground)", fontSize: 12 }}
-              axisLine={false}
-              tickLine={false}
-            />
-            <Tooltip
-              cursor={{ stroke: "var(--border)" }}
-              contentStyle={{
-                background: "var(--popover)",
-                border: "1px solid var(--border)",
-                borderRadius: "var(--radius-md)",
-                color: "var(--popover-foreground)",
-                fontSize: 13,
-              }}
-              formatter={(value: number, name) => [formatValue(value), name]}
-            />
-            {showProfit && (
-              <Legend
-                iconType="circle"
-                iconSize={8}
-                wrapperStyle={{ fontSize: 12, fontWeight: 500, paddingTop: 8 }}
+        {!hasData ? (
+          <div className="flex h-full items-center justify-center text-center">
+            <p className="text-sm text-muted-foreground">
+              Todavía no hay suficiente historial para calcular la variación.
+            </p>
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={data} margin={{ top: 8, right: 12, left: -12, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+              <XAxis
+                dataKey="label"
+                tick={{ fill: "var(--muted-foreground)", fontSize: 12 }}
+                axisLine={{ stroke: "var(--border)" }}
+                tickLine={false}
               />
-            )}
-            <Line
-              type="monotone"
-              dataKey="income"
-              name="Ingresos"
-              stroke="var(--chip-blue)"
-              strokeWidth={2.5}
-              dot={false}
-              activeDot={{ r: 5 }}
-              connectNulls
-            />
-            {showProfit && (
+              <YAxis
+                width={64}
+                tickFormatter={formatAxis}
+                tick={{ fill: "var(--muted-foreground)", fontSize: 12 }}
+                axisLine={false}
+                tickLine={false}
+              />
+              <Tooltip
+                cursor={{ stroke: "var(--border)" }}
+                contentStyle={{
+                  background: "var(--popover)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "var(--radius-md)",
+                  color: "var(--popover-foreground)",
+                  fontSize: 13,
+                }}
+                formatter={(value: number, name) => [formatValue(value), name]}
+              />
+              {showProfit && (
+                <Legend
+                  iconType="circle"
+                  iconSize={8}
+                  wrapperStyle={{ fontSize: 12, fontWeight: 500, paddingTop: 8 }}
+                />
+              )}
               <Line
                 type="monotone"
-                dataKey="profit"
-                name="Ganancias"
-                stroke="var(--chip-green)"
+                dataKey="income"
+                name="Ingresos"
+                stroke="var(--chip-blue)"
                 strokeWidth={2.5}
                 dot={false}
                 activeDot={{ r: 5 }}
                 connectNulls
               />
-            )}
-          </LineChart>
-        </ResponsiveContainer>
+              {showProfit && (
+                <Line
+                  type="monotone"
+                  dataKey="profit"
+                  name="Ganancias"
+                  stroke="var(--chip-green)"
+                  strokeWidth={2.5}
+                  dot={false}
+                  activeDot={{ r: 5 }}
+                  connectNulls
+                />
+              )}
+            </LineChart>
+          </ResponsiveContainer>
+        )}
       </CardContent>
     </Card>
   );
