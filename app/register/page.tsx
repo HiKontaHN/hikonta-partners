@@ -6,6 +6,7 @@ import { signInWithEmailAndPassword, signOut } from "firebase/auth";
 import { auth, authReady } from "@/firebase.config";
 import { HiKontaIcon } from "@/components/shared/hikonta-icon";
 import { PasswordField } from "@/components/ui/password-field";
+import { SearchableSelect } from "@/components/shared/searchable-select";
 import { Lineicons } from "@lineiconshq/react-lineicons";
 import {
   Buildings1Outlined,
@@ -16,12 +17,74 @@ import {
   ArrowRightOutlined,
 } from "@lineiconshq/free-icons";
 
+const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL ?? "https://hikonta.app";
+const BIRTH_MONTHS = [
+  "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+  "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
+].map((label, index) => ({ value: String(index + 1), label }));
+const BIRTH_DAYS = Array.from({ length: 31 }, (_, index) => ({
+  value: String(index + 1),
+  label: String(index + 1),
+}));
+const MAX_BIRTH_YEAR = new Date().getUTCFullYear() - 18;
+const BIRTH_YEARS = Array.from({ length: 100 }, (_, index) => {
+  const year = String(MAX_BIRTH_YEAR - index);
+  return { value: year, label: year };
+});
+
+function dateOfBirthFromParts(month: string, day: string, year: string) {
+  if (!/^\d{1,2}$/.test(month) || !/^\d{1,2}$/.test(day) || !/^\d{4}$/.test(year)) {
+    return null;
+  }
+
+  const normalizedMonth = month.padStart(2, "0");
+  const normalizedDay = day.padStart(2, "0");
+  const dateOfBirth = `${year}-${normalizedMonth}-${normalizedDay}`;
+  const parsed = new Date(`${dateOfBirth}T00:00:00Z`);
+
+  if (
+    Number.isNaN(parsed.getTime()) ||
+    parsed.toISOString().slice(0, 10) !== dateOfBirth
+  ) {
+    return null;
+  }
+
+  return dateOfBirth;
+}
+
+function isAdult(dateOfBirth: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth)) return false;
+
+  const birthDate = new Date(`${dateOfBirth}T00:00:00Z`);
+  if (
+    Number.isNaN(birthDate.getTime()) ||
+    birthDate.toISOString().slice(0, 10) !== dateOfBirth
+  ) {
+    return false;
+  }
+
+  const today = new Date();
+  if (birthDate > today) return false;
+
+  let age = today.getUTCFullYear() - birthDate.getUTCFullYear();
+  const birthdayPending =
+    today.getUTCMonth() < birthDate.getUTCMonth() ||
+    (today.getUTCMonth() === birthDate.getUTCMonth() &&
+      today.getUTCDate() < birthDate.getUTCDate());
+  if (birthdayPending) age -= 1;
+
+  return age >= 18;
+}
+
 export default function RegisterPage() {
   const [form, setForm] = useState({
     incubatorName: "",
     contactName: "",
     email: "",
     phone: "",
+    birthMonth: "",
+    birthDay: "",
+    birthYear: "",
     password: "",
   });
   const [error, setError] = useState<string | null>(null);
@@ -34,12 +97,30 @@ export default function RegisterPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+
+    const dateOfBirth = dateOfBirthFromParts(
+      form.birthMonth,
+      form.birthDay,
+      form.birthYear,
+    );
+    if (!dateOfBirth || !isAdult(dateOfBirth)) {
+      setError("Debes ingresar una fecha válida y tener al menos 18 años para crear una cuenta");
+      return;
+    }
+
     setLoading(true);
     try {
       const res = await fetch("/api/partner/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          incubatorName: form.incubatorName,
+          contactName: form.contactName,
+          email: form.email,
+          phone: form.phone,
+          password: form.password,
+          dateOfBirth,
+        }),
       });
       const body = await res.json();
 
@@ -163,6 +244,55 @@ export default function RegisterPage() {
             </label>
           </div>
 
+          <fieldset className="flex flex-col gap-1.5 text-sm">
+            <legend className="font-semibold text-muted-foreground">Fecha de nacimiento</legend>
+            <div className="grid grid-cols-[1fr_1fr_1.35fr] gap-2">
+              <label className="flex flex-col gap-1">
+                <span className="text-xs text-muted-foreground">Mes</span>
+                <SearchableSelect
+                  id="birth-month"
+                  value={form.birthMonth}
+                  options={BIRTH_MONTHS}
+                  onChange={(value) => update("birthMonth", value)}
+                  placeholder="Mes"
+                  searchPlaceholder="Buscar mes..."
+                  disabled={loading}
+                  className="h-11 w-full"
+                />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-xs text-muted-foreground">Día</span>
+                <SearchableSelect
+                  id="birth-day"
+                  value={form.birthDay}
+                  options={BIRTH_DAYS}
+                  onChange={(value) => update("birthDay", value)}
+                  placeholder="Día"
+                  searchPlaceholder="Buscar día..."
+                  disabled={loading}
+                  className="h-11 w-full"
+                />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-xs text-muted-foreground">Año</span>
+                <SearchableSelect
+                  id="birth-year"
+                  value={form.birthYear}
+                  options={BIRTH_YEARS}
+                  onChange={(value) => update("birthYear", value)}
+                  placeholder="Año"
+                  searchPlaceholder="Buscar año..."
+                  align="end"
+                  disabled={loading}
+                  className="h-11 w-full"
+                />
+              </label>
+            </div>
+            <span className="text-xs text-muted-foreground">
+              Se usa únicamente para comprobar elegibilidad y no se conserva.
+            </span>
+          </fieldset>
+
           <PasswordField
             value={form.password}
             onChange={(v) => update("password", v)}
@@ -183,6 +313,18 @@ export default function RegisterPage() {
             Crear cuenta
             {!loading && <Lineicons icon={ArrowRightOutlined} size={16} />}
           </button>
+
+          <p className="text-center text-xs text-muted-foreground">
+            Al crear una cuenta, aceptas nuestros{" "}
+            <Link href={`${MAIN_APP_URL}/terms`} className="underline hover:text-primary">
+              términos de servicio
+            </Link>{" "}
+            y{" "}
+            <Link href={`${MAIN_APP_URL}/privacy`} className="underline hover:text-primary">
+              política de privacidad
+            </Link>
+            .
+          </p>
         </form>
 
         <p className="mt-6 text-center text-sm text-muted-foreground">

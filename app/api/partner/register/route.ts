@@ -1,4 +1,4 @@
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { adminAuth } from "@/lib/firebase-admin";
 import { sql } from "@/lib/db";
 import { createErrorResponse } from "@/lib/auth";
@@ -38,18 +38,61 @@ export async function POST(request: NextRequest) {
       contactName,
       email,
       phone,
+      dateOfBirth,
       password,
     }: {
       incubatorName?: string;
       contactName?: string;
       email?: string;
       phone?: string;
+      dateOfBirth?: string;
       password?: string;
     } = await request.json();
 
     if (!incubatorName?.trim()) return createErrorResponse("El nombre de la incubadora es requerido", 400);
     if (!contactName?.trim()) return createErrorResponse("El nombre de contacto es requerido", 400);
     if (!email?.trim()) return createErrorResponse("El correo es requerido", 400);
+    if (!dateOfBirth) return createErrorResponse("La fecha de nacimiento es requerida", 400);
+
+    // Se comprueba nuevamente en el servidor y no se persiste. El portal es
+    // un servicio empresarial para adultos y no debe recopilar datos de menores.
+    const birthDate = new Date(`${dateOfBirth}T00:00:00Z`);
+    const today = new Date();
+    if (
+      !/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth) ||
+      Number.isNaN(birthDate.getTime()) ||
+      birthDate.toISOString().slice(0, 10) !== dateOfBirth ||
+      birthDate > today
+    ) {
+      return createErrorResponse("Fecha de nacimiento inválida", 400);
+    }
+
+    let age = today.getUTCFullYear() - birthDate.getUTCFullYear();
+    const birthdayPending =
+      today.getUTCMonth() < birthDate.getUTCMonth() ||
+      (today.getUTCMonth() === birthDate.getUTCMonth() &&
+        today.getUTCDate() < birthDate.getUTCDate());
+    if (birthdayPending) age -= 1;
+
+    if (age < 18) {
+      const response = NextResponse.json(
+        { error: "Debes tener al menos 18 años para crear una cuenta" },
+        { status: 403 },
+      );
+      response.cookies.set("hikonta_partner_age_ineligible", "1", {
+        httpOnly: true,
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+        maxAge: 24 * 60 * 60,
+        path: "/",
+      });
+      return response;
+    }
+
+    if (request.cookies.get("hikonta_partner_age_ineligible")?.value === "1") {
+      return createErrorResponse("No se puede completar el registro con esta sesión", 403);
+    }
+
     if (!password || password.length < 6) {
       return createErrorResponse("La contraseña debe tener al menos 6 caracteres", 400);
     }
