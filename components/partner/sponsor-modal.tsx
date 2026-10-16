@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useAuth } from "@/hooks/use-auth";
 import { usePartnerSWR } from "@/hooks/use-partner-swr";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
@@ -36,8 +35,7 @@ export function SponsorModal({
   orgId: number;
   orgName: string;
 }) {
-  const { token } = useAuth();
-  const { data: creditsData, isLoading: creditsLoading } = usePartnerSWR<CreditsResponse>(
+  const { data: creditsData, isLoading: creditsLoading, mutate: mutateCredits } = usePartnerSWR<CreditsResponse>(
     open ? "/api/partner/credits" : null
   );
   const availableBatches = (creditsData?.data ?? []).filter((b) => b.pending_count > 0);
@@ -76,7 +74,7 @@ export function SponsorModal({
     try {
       const res = await fetch("/api/partner/sponsor", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        headers: { "Content-Type": "application/json" },
         // Number(orgId): el driver de Neon devuelve columnas bigint como
         // string (para no perder precisión) — si el endpoint que originó
         // este `orgId` lo trajo así (ej. o.id sin ::int en el SELECT), acá
@@ -91,6 +89,7 @@ export function SponsorModal({
         return;
       }
 
+      await mutateCredits();
       reset();
       onSuccess();
       onClose();

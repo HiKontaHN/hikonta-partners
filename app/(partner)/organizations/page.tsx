@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import { usePartnerSWR } from "@/hooks/use-partner-swr";
 import { useDebounce } from "@/hooks/use-debounce";
 import { usePageHeader } from "@/components/partner/page-header-slot";
-import { PeriodPicker, MONTH_LABELS, pickDefaultPeriod, type AvailablePeriod } from "@/components/partner/period-picker";
+import { PeriodPicker, MONTH_LABELS, type AvailablePeriod } from "@/components/partner/period-picker";
 import { Badge } from "@/components/ui/badge";
 import { PageSpinner } from "@/components/ui/spinner";
 import { Button } from "@/components/ui/button";
@@ -41,14 +41,16 @@ type OrgRow = {
   incomeTrendPct: number | null;
 };
 
-type OrgsResponse = { data: OrgRow[]; total: number; page: number; pages: number; period: AvailablePeriod };
-type PeriodsResponse = { data: AvailablePeriod[] };
-
-// Solo se usa para poblar las opciones del filtro de sector con el conteo
-// real del portafolio completo — ya lo calcula /api/partner/dashboard
-// (sectorBreakdown), no hace falta un endpoint nuevo para esto.
 type SectorSlice = { industryId: number | null; industryName: string; count: number };
-type DashboardResponse = { data: { sectorBreakdown: SectorSlice[] } };
+type OrgsResponse = {
+  data: OrgRow[];
+  total: number;
+  page: number;
+  pages: number;
+  period: AvailablePeriod;
+  availablePeriods: AvailablePeriod[];
+  sectors: SectorSlice[];
+};
 
 const STATUS_LABEL: Record<OrgRow["status"], string> = {
   ACTIVE: "Activo",
@@ -88,15 +90,7 @@ export default function OrganizationsPage() {
     setPage(1);
   }, []);
 
-  // Filtro de mes/año — mismos períodos disponibles que el dashboard (todo
-  // el portafolio), ver lib/periods.ts en el backend.
-  const { data: periodsData } = usePartnerSWR<PeriodsResponse>("/api/partner/dashboard/periods");
-  const periods = periodsData?.data ?? [];
   const [period, setPeriod] = useState<AvailablePeriod | null>(null);
-  useEffect(() => {
-    if (period || periods.length === 0) return;
-    setPeriod(pickDefaultPeriod(periods));
-  }, [periods, period]);
   const handlePeriod = useCallback((p: AvailablePeriod) => {
     setPeriod(p);
     setPage(1);
@@ -111,8 +105,9 @@ export default function OrganizationsPage() {
   }).toString();
 
   const { data, isLoading, mutate } = usePartnerSWR<OrgsResponse>(`/api/partner/organizations?${qs}`);
-  const { data: dashboardData } = usePartnerSWR<DashboardResponse>("/api/partner/dashboard");
-  const sectors = dashboardData?.data.sectorBreakdown ?? [];
+  const periods = data?.availablePeriods ?? [];
+  const sectors = data?.sectors ?? [];
+  const selectedPeriod = period ?? data?.period ?? null;
 
   const hasFilters = search !== "" || status !== "all" || industry !== "all";
   const periodLabel = data ? `${MONTH_LABELS[data.period.month - 1]} ${data.period.year}` : "";
@@ -133,8 +128,8 @@ export default function OrganizationsPage() {
             <p className="text-sm text-muted-foreground">Emprendedores vinculados a tu portafolio.</p>
           </div>
           <div className="flex items-center gap-2">
-            {periods.length > 0 && (
-              <PeriodPicker periods={periods} value={period ?? periods[0]} onChange={handlePeriod} />
+            {periods.length > 0 && selectedPeriod && (
+              <PeriodPicker periods={periods} value={selectedPeriod} onChange={handlePeriod} />
             )}
             <Button type="button" onClick={() => setInviteOpen(true)}>
               + Agregar emprendedor
@@ -180,7 +175,7 @@ export default function OrganizationsPage() {
         </div>
       </div>
     ),
-    [search, status, industry, sectors, handleSearch, handleStatus, handleIndustry, periods, period, handlePeriod]
+    [search, status, industry, sectors, handleSearch, handleStatus, handleIndustry, periods, selectedPeriod, handlePeriod]
   );
 
   return (

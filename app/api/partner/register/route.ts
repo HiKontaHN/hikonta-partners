@@ -3,6 +3,7 @@ import { adminAuth } from "@/lib/firebase-admin";
 import { sql } from "@/lib/db";
 import { createErrorResponse } from "@/lib/auth";
 import { rateLimit, getClientIP } from "@/lib/rate-limit";
+import { hasValidRequestOrigin } from "@/lib/request-origin";
 
 // POST /api/partner/register — pública, sin verifyPartner().
 // Crea el usuario en Firebase + su fila en `users` + su fila en `partners`
@@ -12,6 +13,9 @@ import { rateLimit, getClientIP } from "@/lib/rate-limit";
 // en yelifin-sistema, sección "Preguntas abiertas").
 export async function POST(request: NextRequest) {
   try {
+    if (!hasValidRequestOrigin(request)) {
+      return createErrorResponse("Origen no autorizado", 403);
+    }
     // Rate limit propio, más estricto que el global de proxy.ts (300/min) —
     // mismo patrón que los endpoints sensibles de hikonta-admin
     // (create-user, add-admin): esta ruta es pública, sin auth, y crea un

@@ -1,5 +1,5 @@
-import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
+import { getApps, initializeApp } from "firebase/app";
+import { getAuth, inMemoryPersistence, setPersistence, signOut } from "firebase/auth";
 
 // Mismo proyecto de Firebase que yelifin-sistema (HiKonta) — los
 // coordinadores de partner son usuarios normales de Firebase, vinculados
@@ -13,7 +13,13 @@ const firebaseConfig = {
   storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET!,
 };
 
-const app = initializeApp(firebaseConfig);
+const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
 const auth = getAuth(app);
+
+// La sesión durable vive exclusivamente en la cookie httpOnly del servidor.
+// También elimina cualquier persistencia del SDK dejada por versiones previas.
+export const authReady = typeof window === "undefined"
+  ? Promise.resolve()
+  : setPersistence(auth, inMemoryPersistence).then(() => signOut(auth));
 
 export { auth };

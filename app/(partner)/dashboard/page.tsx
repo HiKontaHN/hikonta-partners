@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { usePartnerSWR } from "@/hooks/use-partner-swr";
 import { usePageHeader } from "@/components/partner/page-header-slot";
 import { StatCard } from "@/components/partner/stat-card";
-import { PeriodPicker, MONTH_LABELS, pickDefaultPeriod, type AvailablePeriod } from "@/components/partner/period-picker";
+import { PeriodPicker, MONTH_LABELS, type AvailablePeriod } from "@/components/partner/period-picker";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -26,12 +26,11 @@ type TopGrowthOrg = { id: number; name: string; growthPct: number };
 type TopGrowthSector = { industryId: number | null; industryName: string; avgGrowthPct: number };
 type OrgActivity = { id: number; name: string; status: "active" | "inactive" | "dormant"; lastActivityAt: string };
 
-type PeriodsResponse = { data: AvailablePeriod[] };
-
 type DashboardResponse = {
   data: {
     partner: string;
     period: AvailablePeriod;
+    availablePeriods: AvailablePeriod[];
     summary: {
       totalOrganizations: number;
       activeOrganizations: number;
@@ -93,26 +92,14 @@ function TrendValue({ pct }: { pct: number | null }) {
 }
 
 export default function DashboardPage() {
-  // Meses/años con registros reales en el portafolio — ver lib/periods.ts.
-  // Alimenta los selects de abajo para que el partner solo pueda elegir un
-  // período que sí tiene datos.
-  const { data: periodsData } = usePartnerSWR<PeriodsResponse>("/api/partner/dashboard/periods");
-  const periods = periodsData?.data ?? [];
-
   const [period, setPeriod] = useState<AvailablePeriod | null>(null);
-
-  // Default: el mes actual si tiene datos, si no el período disponible más
-  // reciente. Solo corre una vez que llegan los períodos y todavía no hay
-  // selección explícita del partner.
-  useEffect(() => {
-    if (period || periods.length === 0) return;
-    setPeriod(pickDefaultPeriod(periods));
-  }, [periods, period]);
 
   const dashboardUrl = period
     ? `/api/partner/dashboard?year=${period.year}&month=${period.month}`
     : "/api/partner/dashboard";
   const { data, isLoading } = usePartnerSWR<DashboardResponse>(dashboardUrl);
+  const periods = data?.data.availablePeriods ?? [];
+  const selectedPeriod = period ?? data?.data.period ?? null;
 
   // Título + badge de adopción + period picker como header FIJO (mismo
   // patrón que /organizations, ver page-header-slot.tsx) — antes vivía
@@ -130,8 +117,8 @@ export default function DashboardPage() {
               <h1 className="text-xl font-semibold">Dashboard — {data.data.partner}</h1>
               <Badge variant={adoption!.variant}>{adoption!.label}</Badge>
             </div>
-            {periods.length > 0 && (
-              <PeriodPicker periods={periods} value={period ?? periods[0]} onChange={setPeriod} />
+            {periods.length > 0 && selectedPeriod && (
+              <PeriodPicker periods={periods} value={selectedPeriod} onChange={setPeriod} />
             )}
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -139,7 +126,7 @@ export default function DashboardPage() {
           </p>
         </div>
       ) : null,
-    [data, adoption?.variant, adoption?.label, periods, period]
+    [data, adoption?.variant, adoption?.label, periods, selectedPeriod]
   );
 
   if (isLoading || !data) return <PageSpinner />;
@@ -187,18 +174,18 @@ export default function DashboardPage() {
         />
 
         {/* KPI 2 — Crecimiento: % de crecimiento en ganancia desde que cada
-            org se unió al portafolio, promediado mensual (mismo patrón
-            antes/después que lib/impact.ts, alimentado con ganancia). */}
+            org se unió al portafolio hasta el período filtrado, promediado
+            mensual (mismo patrón antes/después que lib/impact.ts). */}
         <StatCard
           title="Crecimiento"
           value={<TrendValue pct={summary.avgProfitGrowthPct} />}
           subtitle={
             summary.profitGrowthOrgsCount > 0
-              ? `Crecimiento en ganancia de ${summary.profitGrowthOrgsCount} emprendedor${summary.profitGrowthOrgsCount === 1 ? "" : "es"} desde que se unieron`
+              ? `Crecimiento en ganancia de ${summary.profitGrowthOrgsCount} emprendedor${summary.profitGrowthOrgsCount === 1 ? "" : "es"} desde que se unieron hasta ${periodLabel}`
               : "Todavía no hay suficiente historial para medir crecimiento"
           }
           icon={TrendUp1Outlined}
-          info="Compara cuánto ganaban en promedio tus emprendedores antes de unirse a vos contra cuánto ganan ahora — mide el impacto de tu acompañamiento."
+          info={`Compara cuánto ganaban en promedio antes de unirse contra su promedio desde el ingreso hasta ${periodLabel}.`}
         />
 
         {/* KPI 3 — Sector con más crecimiento: el nombre del sector es el
@@ -223,9 +210,9 @@ export default function DashboardPage() {
               "—"
             )
           }
-          subtitle="Promedio de crecimiento en ganancia por sector"
+          subtitle={`Promedio de crecimiento en ganancia hasta ${periodLabel}`}
           icon={Buildings1Outlined}
-          info="El rubro cuyos negocios, en promedio, más aumentaron su ganancia desde que se unieron a tu portafolio."
+          info={`El rubro cuyos negocios más aumentaron su ganancia desde que ingresaron al portafolio hasta ${periodLabel}.`}
         />
 
         {/* KPI 4 — 3 emprendimientos en alza, rankeados por % de

@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
     const limit = 10;
     const offset = (page - 1) * limit;
 
-    const payments = await sql`
+    const paymentsPromise = sql`
       SELECT
         sp.id, sp.org_id, sp.amount_usd, sp.currency, sp.status, sp.provider,
         sp.months_purchased, sp.covers_period_start, sp.covers_period_end,
@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
       LIMIT ${limit} OFFSET ${offset}
     `;
 
-    const [{ total }] = await sql`
+    const totalPromise = sql`
       SELECT COUNT(*)::int AS total
       FROM subscription_payments sp
       JOIN organizations o ON o.id = sp.org_id
@@ -52,13 +52,21 @@ export async function GET(request: NextRequest) {
     // Total histórico patrocinado (todas las páginas, no solo esta) — para
     // el resumen arriba de la tabla, mismo espíritu que "N pagos registrados"
     // en hikonta-admin.
-    const [{ lifetime_total, lifetime_months }] = await sql`
+    const lifetimePromise = sql`
       SELECT
         COALESCE(SUM(amount_usd), 0)      AS lifetime_total,
         COALESCE(SUM(months_purchased), 0)::int AS lifetime_months
       FROM subscription_payments
       WHERE paid_by_partner_id = ${auth.data.partnerId} AND status = 'PAID'
     `;
+
+    const [payments, totalRows, lifetimeRows] = await Promise.all([
+      paymentsPromise,
+      totalPromise,
+      lifetimePromise,
+    ]);
+    const total = Number((totalRows as any[])[0]?.total ?? 0);
+    const lifetimeTotal = (lifetimeRows as any[])[0] ?? { lifetime_total: 0, lifetime_months: 0 };
 
     const data = (payments as any[]).map((p) => ({
       id: p.id,
@@ -84,8 +92,8 @@ export async function GET(request: NextRequest) {
       page,
       pages: Math.ceil(total / limit),
       lifetime: {
-        totalUsd: Number(lifetime_total),
-        totalMonths: lifetime_months,
+        totalUsd: Number(lifetimeTotal.lifetime_total),
+        totalMonths: Number(lifetimeTotal.lifetime_months),
       },
     });
   } catch (error) {

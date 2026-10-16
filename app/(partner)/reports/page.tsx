@@ -31,13 +31,11 @@ type AdoptionResponse = {
       salesTransactionsGenerated: number;
       sectorsBenefited: SectorSlice[];
     };
+    trends: {
+      // `income` es % de variación vs el mes anterior, nunca un monto.
+      months: (AdoptionMonth & { income: number | null })[];
+    };
   };
-};
-
-type TrendsResponse = {
-  // `income` acá es % de variación vs el mes anterior, no un monto — ver
-  // /api/partner/reports/trends (política de ética de datos financieros).
-  data: { months: (AdoptionMonth & { income: number | null })[] };
 };
 
 const RECOMMENDATION_LABEL: Record<AdoptionResponse["data"]["recommendation"], string> = {
@@ -48,7 +46,6 @@ const RECOMMENDATION_LABEL: Record<AdoptionResponse["data"]["recommendation"], s
 
 export default function ReportsPage() {
   const { data, isLoading } = usePartnerSWR<AdoptionResponse>("/api/partner/reports/adoption");
-  const { data: trends, isLoading: trendsLoading } = usePartnerSWR<TrendsResponse>("/api/partner/reports/trends");
 
   if (isLoading || !data) return <PageSpinner />;
 
@@ -72,11 +69,11 @@ export default function ReportsPage() {
         />
       </div>
 
-      {!trendsLoading && trends && (
+      {r.trends.months.length > 0 && (
         <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <AdoptionTrendChart months={trends.data.months} />
+          <AdoptionTrendChart months={r.trends.months} />
           <IncomeTrendChart
-            months={trends.data.months}
+            months={r.trends.months}
             mode="percent"
             note="Variación % de ingresos vs el mes anterior — nunca se muestra el monto."
           />

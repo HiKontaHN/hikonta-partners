@@ -59,8 +59,11 @@ type SubscriptionsResponse = {
   data: SubscriptionRow[];
   total: number;
   summary: SubscriptionsSummary;
-  activelySponsored: ActivelySponsoredOrg[];
+  creditTotals: { pending: number; claimed: number };
+  sponsorshipLifetime: { totalUsd: number; totalMonths: number };
 };
+
+type SponsoredResponse = { data: ActivelySponsoredOrg[] };
 
 const STATUS_LABEL: Record<string, string> = {
   TRIAL: "Prueba",
@@ -100,22 +103,11 @@ const TABS: TabItem[] = [
 export default function SubscriptionsPage() {
   const { data, isLoading, mutate } = usePartnerSWR<SubscriptionsResponse>("/api/partner/subscriptions");
   const [sponsorTarget, setSponsorTarget] = useState<SubscriptionRow | null>(null);
-  // Fuerza un remount (y por lo tanto un refetch desde página 1) del
-  // historial de patrocinios cuando se registra uno nuevo — más simple que
-  // levantar el estado de búsqueda/página hasta acá solo para invalidar esa
-  // key de SWR en particular.
+  // Fuerza un remount del historial y de la lista de patrocinios activos
+  // cuando se consume una licencia, sin cargar ninguno de esos endpoints
+  // durante la visita inicial a la pantalla.
   const [paymentsRefreshKey, setPaymentsRefreshKey] = useState(0);
   const [activeTab, setActiveTab] = useState<string>(TABS[0].key);
-
-  // Mismas keys que usan LicensesSection/HistorySection más abajo — SWR las
-  // deduplica (un solo fetch de red), esto solo lee el resultado compartido
-  // para armar las stat cards de arriba. `mutateCredits` revalida esa key
-  // compartida (afecta también a LicensesSection) cuando un patrocinio
-  // consume una licencia.
-  const { data: creditsData, mutate: mutateCredits } = usePartnerSWR<CreditsResponse>("/api/partner/credits");
-  const { data: paymentsData } = usePartnerSWR<PaymentsResponse>(
-    "/api/partner/subscriptions/payments?search=&status=all&page=1"
-  );
 
   const summary = data?.summary;
 
@@ -145,15 +137,15 @@ export default function SubscriptionsPage() {
         />
         <StatCard
           title="Historial de patrocinios"
-          value={paymentsData ? `${paymentsData.lifetime.totalMonths} meses` : "—"}
-          subtitle={paymentsData ? `$${paymentsData.lifetime.totalUsd.toFixed(2)} pagados en total` : undefined}
+          value={data ? `${data.sponsorshipLifetime.totalMonths} meses` : "—"}
+          subtitle={data ? `$${data.sponsorshipLifetime.totalUsd.toFixed(2)} pagados en total` : undefined}
           icon={Wallet1Outlined}
         />
         <div className="col-span-2 sm:col-span-1">
           <StatCard
             title="Licencias sin asignar"
-            value={creditsData ? creditsData.totals.pending : "—"}
-            subtitle={creditsData ? `${creditsData.totals.claimed} ya asignadas` : undefined}
+            value={data ? data.creditTotals.pending : "—"}
+            subtitle={data ? `${data.creditTotals.claimed} ya asignadas` : undefined}
             icon={Ticket1Outlined}
           />
         </div>
@@ -168,9 +160,7 @@ export default function SubscriptionsPage() {
         <SubscriptionsSection rows={data?.data ?? []} isLoading={isLoading} onSponsor={setSponsorTarget} />
       )}
       {activeTab === "licenses" && <LicensesSection />}
-      {activeTab === "sponsored" && (
-        <SponsoredSection orgs={data?.activelySponsored ?? []} isLoading={isLoading} />
-      )}
+      {activeTab === "sponsored" && <SponsoredSection key={paymentsRefreshKey} />}
       {activeTab === "history" && <HistorySection key={paymentsRefreshKey} />}
 
       {sponsorTarget && (
@@ -180,7 +170,6 @@ export default function SubscriptionsPage() {
           onClose={() => setSponsorTarget(null)}
           onSuccess={() => {
             mutate();
-            mutateCredits();
             setPaymentsRefreshKey((k) => k + 1);
           }}
           orgId={sponsorTarget.id}
@@ -488,12 +477,13 @@ function LicensesSection() {
 
 // ── Patrocinando activamente ───────────────────────────────────────────────
 // Distinto del historial: acá solo orgs con suscripción ACTIVE hoy que vos
-// patrocinaste alguna vez (ver activelySponsored en GET
-// /api/partner/subscriptions) — si una org canceló, sale de esta lista
-// aunque siga en el historial de pagos.
+// patrocinaste alguna vez. Se consulta al montar esta pestaña; si una org
+// canceló, sale de esta lista aunque siga en el historial de pagos.
 
-function SponsoredSection({ orgs, isLoading }: { orgs: ActivelySponsoredOrg[]; isLoading: boolean }) {
+function SponsoredSection() {
+  const { data, isLoading } = usePartnerSWR<SponsoredResponse>("/api/partner/subscriptions/sponsored");
   const [page, setPage] = useState(1);
+  const orgs = data?.data ?? [];
 
   if (isLoading) return <SectionSpinner />;
 

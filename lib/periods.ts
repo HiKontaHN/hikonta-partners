@@ -58,3 +58,35 @@ export function resolvePeriod(searchParams: URLSearchParams): SelectedPeriod {
   const periodStart = `${year}-${String(month).padStart(2, "0")}-01`;
   return { year, month, periodStart };
 }
+
+// Para la primera carga de una pantalla, el cliente todavía no conoce los
+// períodos disponibles. Elegimos el mes actual si tiene actividad y, si no,
+// el período más reciente. Cuando el usuario ya envía year/month respetamos
+// esa selección explícita para que cambiar los filtros no altere el resultado.
+export function resolveInitialPeriod(
+  searchParams: URLSearchParams,
+  periods: AvailablePeriod[]
+): SelectedPeriod {
+  const yearParam = Number(searchParams.get("year"));
+  const monthParam = Number(searchParams.get("month"));
+  const hasExplicitPeriod =
+    Number.isInteger(yearParam) &&
+    yearParam >= 2000 &&
+    yearParam <= 2100 &&
+    Number.isInteger(monthParam) &&
+    monthParam >= 1 &&
+    monthParam <= 12;
+
+  if (hasExplicitPeriod || periods.length === 0) return resolvePeriod(searchParams);
+
+  const now = new Date();
+  const current = { year: now.getUTCFullYear(), month: now.getUTCMonth() + 1 };
+  const selected = periods.some((p) => p.year === current.year && p.month === current.month)
+    ? current
+    : periods[0];
+
+  return {
+    ...selected,
+    periodStart: `${selected.year}-${String(selected.month).padStart(2, "0")}-01`,
+  };
+}

@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { verifyPartner, createErrorResponse, isAuthSuccess } from "@/lib/auth";
 import { sql } from "@/lib/db";
-import { resolvePeriod } from "@/lib/periods";
+import { getAvailablePeriods, resolveInitialPeriod } from "@/lib/periods";
 import { pctChange } from "@/lib/growth";
 
 // Mismos umbrales que /api/partner/dashboard — ver documentation/dashboard.md.
@@ -25,7 +25,8 @@ export async function GET(request: NextRequest) {
     const offset = (page - 1) * limit;
     const searchPattern = `%${search}%`;
     // Mes/año de las columnas "este mes" — ?year=&month=, ver lib/periods.ts.
-    const { year, month, periodStart } = resolvePeriod(searchParams);
+    const availablePeriods = await getAvailablePeriods(auth.data.partnerId);
+    const { year, month, periodStart } = resolveInitialPeriod(searchParams, availablePeriods);
 
     // `status` se deriva de last_activity_at igual que en el dashboard, pero
     // acá hace falta calcularlo EN SQL (no en JS después de traer la fila)
@@ -33,7 +34,7 @@ export async function GET(request: NextRequest) {
     // no soporta fragmentos de SQL reutilizables (cada template se ejecuta
     // solo), así que el WHERE se repite en la query de datos y en la de
     // COUNT — mismo patrón que subscriptions/payments/route.ts.
-    const orgs = await sql`
+    const orgsPromise = sql`
       WITH portfolio AS (
         SELECT
           o.id, o.name, o.logo_url, o.created_at, o.industry_id,
@@ -81,7 +82,7 @@ export async function GET(request: NextRequest) {
       LIMIT ${limit} OFFSET ${offset}
     `;
 
-    const [{ total }] = await sql`
+    const countPromise = sql`
       WITH portfolio AS (
         SELECT
           o.id, o.industry_id,
@@ -115,6 +116,23 @@ export async function GET(request: NextRequest) {
         )
     `;
 
+    const sectorsPromise = sql`
+      SELECT i.id AS industry_id, i.name AS industry_name, COUNT(*)::int AS count
+      FROM organizations o
+      JOIN partner_organizations po
+        ON po.org_id = o.id AND po.partner_id = ${auth.data.partnerId}
+      LEFT JOIN industries i ON i.id = o.industry_id
+      GROUP BY i.id, i.name
+      ORDER BY count DESC, industry_name ASC NULLS LAST
+    `;
+
+    const [orgs, countRows, sectorRows] = await Promise.all([
+      orgsPromise,
+      countPromise,
+      sectorsPromise,
+    ]);
+    const total = Number((countRows as any[])[0]?.total ?? 0);
+
     const data = (orgs as any[]).map((o) => {
       const daysActive = Math.floor((Date.now() - new Date(o.created_at).getTime()) / 86_400_000);
       const incomeThisMonth = Number(o.income_this_month);
@@ -143,7 +161,19 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    return Response.json({ data, total, page, pages: Math.ceil(total / limit), period: { year, month } });
+    return Response.json({
+      data,
+      total,
+      page,
+      pages: Math.ceil(total / limit),
+      period: { year, month },
+      availablePeriods,
+      sectors: (sectorRows as any[]).map((s) => ({
+        industryId: s.industry_id,
+        industryName: s.industry_name ?? "Sin sector",
+        count: s.count,
+      })),
+    });
   } catch (error) {
     console.error("GET /api/partner/organizations:", error);
     return createErrorResponse("Error al obtener emprendedores", 500);

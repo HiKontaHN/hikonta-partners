@@ -26,7 +26,7 @@ export function ThemeToggle({ collapsed = false }: { collapsed?: boolean }) {
       aria-label={label}
       title={collapsed ? label : undefined}
       className={cn(
-        "flex items-center gap-3 rounded-full bg-muted text-sm font-semibold text-foreground transition-colors hover:bg-secondary",
+        "flex cursor-pointer items-center gap-3 rounded-full bg-muted text-sm font-semibold text-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
         collapsed ? "h-9 w-9 shrink-0 justify-center" : "w-full px-4 py-2"
       )}
     >

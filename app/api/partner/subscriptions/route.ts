@@ -17,7 +17,13 @@ export async function GET(request: NextRequest) {
     const limit = 10; // paginación estándar de HiKonta
     const offset = (page - 1) * limit;
 
-    const rows = await sql`
+    const rowsPromise = sql`
+      WITH sponsored AS (
+        SELECT org_id, COALESCE(SUM(months_purchased), 0)::int AS months_sponsored
+        FROM subscription_payments
+        WHERE paid_by_partner_id = ${auth.data.partnerId}
+        GROUP BY org_id
+      )
       SELECT
         o.id, o.name, o.logo_url,
         u.display_name AS owner_name,
@@ -30,26 +36,22 @@ export async function GET(request: NextRequest) {
         os.current_period_end,
         os.cancel_at_period_end,
         os.trial_end_date,
-        (SELECT COALESCE(SUM(months_purchased), 0)::int
-           FROM subscription_payments
-           WHERE org_id = o.id AND paid_by_partner_id = ${auth.data.partnerId}) AS months_sponsored
+        COALESCE(ps.months_sponsored, 0)::int AS months_sponsored
       FROM organizations o
       JOIN partner_organizations po ON po.org_id = o.id AND po.partner_id = ${auth.data.partnerId}
       LEFT JOIN users u ON u.id = o.owner_user_id
       LEFT JOIN org_subscriptions os ON os.org_id = o.id
       LEFT JOIN subscription_plans sp ON sp.id = os.plan_id
+      LEFT JOIN sponsored ps ON ps.org_id = o.id
       ORDER BY os.current_period_end ASC NULLS LAST, o.name ASC
       LIMIT ${limit} OFFSET ${offset}
     `;
 
-    const [{ total }] = await sql`
-      SELECT COUNT(*)::int AS total FROM partner_organizations WHERE partner_id = ${auth.data.partnerId}
-    `;
-
     // Resumen por estado — TODO el portafolio, no solo esta página (10 a la
     // vez) — para las stat cards del panel.
-    const [summaryRow] = await sql`
+    const summaryPromise = sql`
       SELECT
+        COUNT(*)::int AS total,
         COUNT(*) FILTER (WHERE os.status = 'ACTIVE')    AS active_count,
         COUNT(*) FILTER (WHERE os.status = 'TRIAL')     AS trial_count,
         COUNT(*) FILTER (WHERE os.status = 'PAST_DUE')  AS past_due_count,
@@ -60,28 +62,34 @@ export async function GET(request: NextRequest) {
       LEFT JOIN org_subscriptions os ON os.org_id = o.id
     `;
 
-    // Orgs que ESTE partner patrocinó y cuya suscripción sigue activa hoy —
-    // distinto del historial completo de pagos (que puede incluir orgs que
-    // ya cancelaron). Sin paginar: son un subconjunto chico del portafolio.
-    const activelySponsoredRows = await sql`
+    const creditTotalsPromise = sql`
       SELECT
-        o.id, o.name, o.logo_url,
-        sp.name AS plan_name,
-        os.current_period_end,
-        (SELECT COALESCE(SUM(months_purchased), 0)::int
-           FROM subscription_payments
-           WHERE org_id = o.id AND paid_by_partner_id = ${auth.data.partnerId}) AS months_sponsored
-      FROM organizations o
-      JOIN partner_organizations po ON po.org_id = o.id AND po.partner_id = ${auth.data.partnerId}
-      LEFT JOIN org_subscriptions os ON os.org_id = o.id
-      LEFT JOIN subscription_plans sp ON sp.id = os.plan_id
-      WHERE os.status = 'ACTIVE'
-        AND EXISTS (
-          SELECT 1 FROM subscription_payments
-          WHERE org_id = o.id AND paid_by_partner_id = ${auth.data.partnerId} AND months_purchased > 0
-        )
-      ORDER BY os.current_period_end ASC NULLS LAST
+        COUNT(*) FILTER (WHERE c.status = 'PENDING')::int AS pending,
+        COUNT(*) FILTER (WHERE c.status = 'CLAIMED')::int AS claimed
+      FROM partner_credit_batches b
+      LEFT JOIN partner_subscription_credits c ON c.batch_id = b.id
+      WHERE b.partner_id = ${auth.data.partnerId}
     `;
+
+    const sponsorshipLifetimePromise = sql`
+      SELECT
+        COALESCE(SUM(amount_usd), 0) AS total_usd,
+        COALESCE(SUM(months_purchased), 0)::int AS total_months
+      FROM subscription_payments
+      WHERE paid_by_partner_id = ${auth.data.partnerId} AND status = 'PAID'
+    `;
+
+    const [rows, summaryRows, creditTotalsRows, sponsorshipLifetimeRows] =
+      await Promise.all([
+        rowsPromise,
+        summaryPromise,
+        creditTotalsPromise,
+        sponsorshipLifetimePromise,
+      ]);
+    const summaryRow = (summaryRows as any[])[0];
+    const total = Number(summaryRow.total);
+    const creditTotals = (creditTotalsRows as any[])[0];
+    const sponsorshipLifetime = (sponsorshipLifetimeRows as any[])[0];
 
     const now = Date.now();
 
@@ -122,14 +130,14 @@ export async function GET(request: NextRequest) {
         expiredCount: Number(summaryRow.expired_count),
         totalCount: total,
       },
-      activelySponsored: (activelySponsoredRows as any[]).map((o) => ({
-        id: o.id,
-        name: o.name,
-        logoUrl: o.logo_url,
-        planName: o.plan_name,
-        currentPeriodEnd: o.current_period_end,
-        monthsSponsored: o.months_sponsored,
-      })),
+      creditTotals: {
+        pending: Number(creditTotals.pending),
+        claimed: Number(creditTotals.claimed),
+      },
+      sponsorshipLifetime: {
+        totalUsd: Number(sponsorshipLifetime.total_usd),
+        totalMonths: Number(sponsorshipLifetime.total_months),
+      },
     });
   } catch (error) {
     console.error("GET /api/partner/subscriptions:", error);

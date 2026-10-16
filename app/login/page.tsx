@@ -3,8 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { signInWithEmailAndPassword, signOut } from "firebase/auth";
-import { auth } from "@/firebase.config";
-import { setTokenCookie } from "@/lib/token-cookie";
+import { auth, authReady } from "@/firebase.config";
 import { HiKontaIcon } from "@/components/shared/hikonta-icon";
 import { PasswordField } from "@/components/ui/password-field";
 import { Lineicons } from "@lineiconshq/react-lineicons";
@@ -21,42 +20,34 @@ export default function LoginPage() {
     setError(null);
     setLoading(true);
     try {
+      await authReady;
       const cred = await signInWithEmailAndPassword(auth, email.trim(), password);
       const idToken = await cred.user.getIdToken();
 
-      // Firebase es el mismo proyecto que yelifin-sistema — una cuenta de
-      // emprendedor puede autenticarse acá perfectamente bien y no tiene
-      // NADA que ver con este panel. Se corta antes de dejarla "entrar":
-      // si /me da 403 NOT_PARTNER (sin fila en `partners`, ni siquiera
-      // pendiente de aprobación), se cierra la sesión recién abierta y se
-      // muestra el error en el propio form, en vez de dejarla ver
-      // cualquier pantalla del lado de /dashboard.
-      const meRes = await fetch("/api/partner/me", { headers: { Authorization: `Bearer ${idToken}` } });
-      if (meRes.status === 403) {
-        const body = await meRes.json().catch(() => ({}));
-        if (body?.reason === "NOT_PARTNER") {
-          await signOut(auth);
-          setError("Esta cuenta no tiene acceso al panel de partners.");
-          return;
-        }
-        // reason === "PENDING_APPROVAL": SÍ es partner, solo falta la
-        // aprobación — sigue de largo, el layout muestra esa pantalla.
+      const sessionResponse = await fetch("/api/auth/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idToken }),
+      });
+      const sessionBody = await sessionResponse.json().catch(() => ({}));
+      if (!sessionResponse.ok) {
+        throw new Error(sessionBody?.error ?? "No se pudo iniciar la sesión");
       }
 
-      // proxy.ts (middleware) valida la cookie `token`, no el estado de
-      // Firebase en el cliente — hay que setearla ACÁ antes de navegar. Si
-      // se deja que la setee el listener onIdTokenChanged de useAuth() (que
-      // dispara async, después de esta función), router.push llega primero:
-      // el middleware no encuentra cookie y rebota de vuelta a /login.
-      setTokenCookie(idToken);
-      // Navegación dura, no router.push(). El router cache del cliente puede
-      // haber guardado una respuesta previa de /dashboard (redirigida a
-      // /login por el middleware, de antes de tener cookie) y servirla de
-      // nuevo sin volver a pasar por proxy.ts. Un reload completo garantiza
-      // una petición fresca con la cookie ya seteada.
+      await signOut(auth);
       window.location.href = "/dashboard";
-    } catch {
-      setError("Correo o contraseña incorrectos");
+    } catch (loginError: any) {
+      await signOut(auth).catch(() => undefined);
+      const firebaseCredentialError = [
+        "auth/invalid-credential",
+        "auth/user-not-found",
+        "auth/wrong-password",
+      ].includes(loginError?.code);
+      setError(
+        firebaseCredentialError
+          ? "Correo o contraseña incorrectos"
+          : (loginError?.message ?? "No se pudo iniciar la sesión"),
+      );
     } finally {
       setLoading(false);
     }

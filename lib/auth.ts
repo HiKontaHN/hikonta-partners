@@ -2,6 +2,9 @@
 import { NextRequest } from "next/server";
 import { adminAuth } from "@/lib/firebase-admin";
 import { sql } from "@/lib/db";
+import { hasValidRequestOrigin } from "@/lib/request-origin";
+
+const SESSION_COOKIE = "hikonta_partner_auth";
 
 // ── Tipos ─────────────────────────────────────────────────────────────
 
@@ -21,25 +24,32 @@ type AuthResult =
   | { error: null; status: 200; data: PartnerUser };
 
 // ── verifyPartner ─────────────────────────────────────────────────────
-// Análogo a verifyAdmin() en yelifin-sistema: valida el Firebase JWT y
+// Análogo a verifyAdmin() en yelifin-sistema: valida la sesión Firebase y
 // resuelve la identidad contra `partners.user_id`, NO contra
 // organization_members — un coordinador de partner es un rol de
 // plataforma, no un miembro de ninguna organización.
 
 export async function verifyPartner(request: NextRequest): Promise<AuthResult> {
-  const authHeader = request.headers.get("Authorization");
-
-  if (!authHeader?.startsWith("Bearer ")) {
+  const sessionCookie = request.cookies.get(SESSION_COOKIE)?.value;
+  if (!sessionCookie) {
     return { error: "No autorizado", status: 401, data: null };
   }
 
-  const token = authHeader.substring(7);
-
   let decodedToken;
   try {
-    decodedToken = await adminAuth.verifyIdToken(token);
+    decodedToken = await adminAuth.verifySessionCookie(sessionCookie);
   } catch {
-    return { error: "Token inválido o expirado", status: 401, data: null };
+    return { error: "Sesión inválida o expirada", status: 401, data: null };
+  }
+
+  if (decodedToken.email_verified !== true) {
+    return { error: "Debes verificar tu correo para continuar", status: 403, data: null };
+  }
+
+  if (!["GET", "HEAD", "OPTIONS"].includes(request.method)) {
+    if (!hasValidRequestOrigin(request)) {
+      return { error: "Origen no autorizado", status: 403, data: null };
+    }
   }
 
   try {
@@ -51,7 +61,8 @@ export async function verifyPartner(request: NextRequest): Promise<AuthResult> {
         u.display_name,
         p.id            AS partner_id,
         p.name          AS partner_name,
-        p.is_active     AS partner_is_active
+        p.is_active     AS partner_is_active,
+        u.is_active     AS user_is_active
       FROM users u
       JOIN partners p ON p.user_id = u.id
       WHERE u.firebase_uid = ${decodedToken.uid}
@@ -65,6 +76,10 @@ export async function verifyPartner(request: NextRequest): Promise<AuthResult> {
         data: null,
         reason: "NOT_PARTNER",
       };
+    }
+
+    if (!row.user_is_active) {
+      return { error: "Esta cuenta ha sido deshabilitada", status: 403, data: null };
     }
 
     if (!row.partner_is_active) {

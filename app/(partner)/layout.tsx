@@ -36,7 +36,16 @@ const NAV = [
 const SIDEBAR_COLLAPSED_KEY = "hikonta-partners:sidebar-collapsed";
 
 export default function PartnerLayout({ children }: { children: React.ReactNode }) {
-  const { me, loading, pending, notPartner, firebaseUser, emailVerified, signOut } = useAuth();
+  const {
+    me,
+    loading,
+    pending,
+    notPartner,
+    firebaseUser,
+    emailVerified,
+    sessionEmailVerified,
+    signOut,
+  } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
   const [navOpen, setNavOpen] = useState(false);
@@ -59,18 +68,18 @@ export default function PartnerLayout({ children }: { children: React.ReactNode 
     // (is_active = FALSE), así que /api/partner/me también daría 403 acá,
     // pero el paso que le toca primero es confirmar el correo, no esperar
     // la aprobación del admin.
-    if (firebaseUser && !emailVerified) {
+    if (firebaseUser && (!emailVerified || !sessionEmailVerified)) {
       router.replace("/verify-email");
       return;
     }
     // "pending" y "notPartner" son sesión de Firebase válida sin acceso —
-    // no son "sin sesión", así que NO se mandan a /login: con el token
-    // verificándose de verdad en proxy.ts, un firebaseUser real ahí
-    // redirige de vuelta para acá (isPublic + token válido) y se arma un
+    // no son "sin sesión", así que NO se mandan a /login: con la cookie
+    // verificándose en proxy.ts, una sesión real ahí redirige de vuelta
+    // para acá (ruta pública + sesión válida) y se arma un
     // loop. Ambos casos se resuelven quedándose acá, con su propia
     // pantalla más abajo.
     if (!me && !pending && !notPartner) router.replace("/login");
-  }, [loading, me, pending, notPartner, firebaseUser, emailVerified, router]);
+  }, [loading, me, pending, notPartner, firebaseUser, emailVerified, sessionEmailVerified, router]);
 
   // Cierra el drawer al cambiar de ruta (mobile)
   useEffect(() => {
@@ -85,7 +94,7 @@ export default function PartnerLayout({ children }: { children: React.ReactNode 
     );
   }
 
-  if (firebaseUser && !emailVerified) return null; // redirigiendo a /verify-email
+  if (firebaseUser && (!emailVerified || !sessionEmailVerified)) return null;
 
   // Cuenta de Firebase válida (mismo proyecto que yelifin-sistema) sin
   // ninguna fila en `partners` — ej. un emprendedor. No es "pendiente",
@@ -243,7 +252,7 @@ export default function PartnerLayout({ children }: { children: React.ReactNode 
             aria-label="Cerrar sesión"
             title={collapsedMode ? "Cerrar sesión" : undefined}
             className={cn(
-              "flex items-center justify-center gap-2 rounded-full bg-muted text-sm font-semibold text-foreground transition-colors hover:bg-secondary",
+              "flex cursor-pointer items-center justify-center gap-2 rounded-full bg-muted text-sm font-semibold text-foreground transition-colors hover:bg-destructive/10 hover:text-destructive",
               collapsedMode ? "h-9 w-9 shrink-0" : "w-full px-4 py-2"
             )}
           >

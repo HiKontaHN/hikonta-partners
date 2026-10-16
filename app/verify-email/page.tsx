@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/hooks/use-auth";
-import { setTokenCookie } from "@/lib/token-cookie";
 import { HiKontaIcon } from "@/components/shared/hikonta-icon";
 import { Spinner } from "@/components/ui/spinner";
 import { Lineicons } from "@lineiconshq/react-lineicons";
@@ -14,12 +13,19 @@ const RESEND_COOLDOWN = 60;
 
 // Paso intermedio entre registrarse y ver el panel — igual patrón que
 // app/(auth)/verify-email/page.tsx en yelifin-sistema: Firebase sigue
-// generando y validando el link de verificación, esto solo espera a que
-// el usuario lo use y refresca la sesión cuando confirma. El siguiente
+// generando y validando el link de verificación, esto espera a que el
+// usuario lo use y consulta el estado actual cuando confirma. El siguiente
 // paso (aprobación del admin) lo maneja PartnerLayout con la pantalla de
 // "pendiente" — acá no hace falta saber nada de eso.
 export default function VerifyEmailPage() {
-  const { firebaseUser, loading, emailVerified, signOut } = useAuth();
+  const {
+    firebaseUser,
+    loading,
+    emailVerified,
+    sessionEmailVerified,
+    refreshSession,
+    signOut,
+  } = useAuth();
   const router = useRouter();
   const [isSending, setIsSending] = useState(false);
   const [isChecking, setIsChecking] = useState(false);
@@ -32,10 +38,10 @@ export default function VerifyEmailPage() {
       router.replace("/login");
       return;
     }
-    if (emailVerified) {
+    if (emailVerified && sessionEmailVerified) {
       router.replace("/dashboard");
     }
-  }, [firebaseUser, loading, emailVerified, router]);
+  }, [firebaseUser, loading, emailVerified, sessionEmailVerified, router]);
 
   useEffect(() => {
     if (cooldown <= 0) return;
@@ -44,14 +50,12 @@ export default function VerifyEmailPage() {
   }, [cooldown]);
 
   async function handleResend() {
-    if (!firebaseUser || cooldown > 0) return;
+    if (!firebaseUser || emailVerified || cooldown > 0) return;
     setMessage(null);
     setIsSending(true);
     try {
-      const idToken = await firebaseUser.getIdToken();
       const res = await fetch("/api/partner/send-verification-email", {
         method: "POST",
-        headers: { Authorization: `Bearer ${idToken}` },
       });
 
       if (res.status === 429) {
@@ -75,13 +79,20 @@ export default function VerifyEmailPage() {
     setMessage(null);
     setIsChecking(true);
     try {
-      await firebaseUser.reload();
-      if (firebaseUser.emailVerified) {
-        // Refrescar el token para que la cookie lleve email_verified=true;
-        // si no, el próximo request al panel puede leer el token viejo.
-        const freshToken = await firebaseUser.getIdToken(true);
-        setTokenCookie(freshToken);
-        router.replace("/dashboard");
+      const session = await refreshSession();
+      if (session?.emailVerified) {
+        if (session.sessionEmailVerified) {
+          router.replace("/dashboard");
+        } else {
+          // La cookie conserva los claims del momento del login. Después de
+          // verificar el correo se requiere un login nuevo para emitir otra.
+          await signOut();
+          setMessage({
+            type: "success",
+            text: "Correo verificado. Inicia sesión nuevamente para continuar.",
+          });
+          router.replace("/login");
+        }
       } else {
         setMessage({ type: "error", text: "Tu correo todavía no está verificado." });
       }
@@ -114,9 +125,11 @@ export default function VerifyEmailPage() {
           <div>
             <h1 className="text-lg font-extrabold tracking-tight">Verifica tu correo</h1>
             <p className="mx-auto mt-1.5 max-w-sm text-sm text-muted-foreground">
-              Te enviamos un correo de verificación a{" "}
+              {emailVerified && !sessionEmailVerified
+                ? "Tu correo ya está verificado. Inicia sesión nuevamente para continuar."
+                : <>Te enviamos un correo de verificación a{" "}
               <span className="font-semibold text-foreground">{firebaseUser.email}</span>. Revisá
-              tu bandeja de entrada (y spam) y hacé clic en el enlace para activar tu cuenta.
+              tu bandeja de entrada (y spam) y hacé clic en el enlace para activar tu cuenta.</>}
             </p>
           </div>
         </div>
@@ -141,17 +154,23 @@ export default function VerifyEmailPage() {
             {isChecking && (
               <span className="h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground/40 border-t-primary-foreground" />
             )}
-            Ya verifiqué mi correo
+            {emailVerified ? "Iniciar sesión para continuar" : "Ya verifiqué mi correo"}
           </button>
 
           <button
             type="button"
             onClick={handleResend}
-            disabled={isSending || cooldown > 0}
+            disabled={emailVerified || isSending || cooldown > 0}
             className="flex items-center justify-center gap-2 rounded-full bg-muted px-4 py-3 text-sm font-semibold text-foreground transition-opacity hover:bg-secondary disabled:opacity-60"
           >
             <Lineicons icon={SyncOutlined} size={15} className={isSending ? "animate-spin" : undefined} />
-            {isSending ? "Enviando…" : cooldown > 0 ? `Reenviar en ${cooldown}s` : "Reenviar correo de verificación"}
+            {isSending
+              ? "Enviando…"
+              : emailVerified
+                ? "Correo verificado"
+                : cooldown > 0
+                  ? `Reenviar en ${cooldown}s`
+                  : "Reenviar correo de verificación"}
           </button>
         </div>
 

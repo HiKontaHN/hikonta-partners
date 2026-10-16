@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useAuth } from "@/hooks/use-auth";
 import { usePartnerSWR } from "@/hooks/use-partner-swr";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
@@ -74,7 +73,6 @@ function CopyButton({ text }: { text: string }) {
 }
 
 export function InviteModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { token } = useAuth();
   const { data, isLoading, mutate } = usePartnerSWR<InvitesResponse>(open ? "/api/partner/invites" : null);
   const [generating, setGenerating] = useState(false);
   const [revokingId, setRevokingId] = useState<number | null>(null);
@@ -86,7 +84,6 @@ export function InviteModal({ open, onClose }: { open: boolean; onClose: () => v
     try {
       const res = await fetch("/api/partner/invites", {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
       });
       const body = await res.json();
       if (!res.ok) {
@@ -107,7 +104,6 @@ export function InviteModal({ open, onClose }: { open: boolean; onClose: () => v
     try {
       const res = await fetch(`/api/partner/invites/${id}`, {
         method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));

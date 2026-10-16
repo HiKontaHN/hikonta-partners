@@ -5,6 +5,9 @@ import { createErrorResponse } from "@/lib/auth";
 import { sendMail } from "@/lib/mailer";
 import { verifyPartnerEmailTemplate } from "@/lib/email-templates";
 import { rateLimit, getClientIP } from "@/lib/rate-limit";
+import { hasValidRequestOrigin } from "@/lib/request-origin";
+
+const SESSION_COOKIE = "hikonta_partner_auth";
 
 // POST /api/partner/send-verification-email — igual patrón que
 // yelifin-sistema/app/api/auth/send-verification-email: el código de
@@ -16,21 +19,25 @@ import { rateLimit, getClientIP } from "@/lib/rate-limit";
 // con 403 si partners.is_active = FALSE, y este endpoint es justo lo
 // primero que se llama después de /api/partner/register — en ese momento
 // is_active siempre es FALSE (pendiente de aprobación). Acá solo hace
-// falta un token de Firebase válido; el nombre de la incubadora es un
+// falta una sesión Firebase válida; el nombre de la incubadora es un
 // best-effort (si no hay fila en `partners` todavía, el correo sale
 // igual con un saludo genérico) — confirma que la cuenta es de partner
 // sin bloquear el envío por el estado de aprobación.
 export async function POST(request: NextRequest) {
-  const authHeader = request.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) {
+  if (!hasValidRequestOrigin(request)) {
+    return createErrorResponse("Origen no autorizado", 403);
+  }
+
+  const sessionCookie = request.cookies.get(SESSION_COOKIE)?.value;
+  if (!sessionCookie) {
     return createErrorResponse("No autorizado", 401);
   }
 
   let decodedToken;
   try {
-    decodedToken = await adminAuth.verifyIdToken(authHeader.substring(7));
+    decodedToken = await adminAuth.verifySessionCookie(sessionCookie);
   } catch {
-    return createErrorResponse("Token inválido o expirado", 401);
+    return createErrorResponse("Sesión inválida o expirada", 401);
   }
 
   const email = decodedToken.email;

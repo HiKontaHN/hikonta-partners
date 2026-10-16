@@ -2,9 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { signInWithEmailAndPassword } from "firebase/auth";
-import { auth } from "@/firebase.config";
-import { setTokenCookie } from "@/lib/token-cookie";
+import { signInWithEmailAndPassword, signOut } from "firebase/auth";
+import { auth, authReady } from "@/firebase.config";
 import { HiKontaIcon } from "@/components/shared/hikonta-icon";
 import { PasswordField } from "@/components/ui/password-field";
 import { Lineicons } from "@lineiconshq/react-lineicons";
@@ -53,12 +52,18 @@ export default function RegisterPage() {
       // antes del dashboard: verificar el correo (acá) y que un admin
       // apruebe la cuenta (is_active = FALSE — lo maneja el layout del
       // panel con la pantalla de "pendiente" una vez verificado el correo).
+      await authReady;
       const cred = await signInWithEmailAndPassword(auth, form.email.trim(), form.password);
-      // Mismo fix que app/login/page.tsx: setear la cookie acá antes de
-      // navegar (no depender del listener async de useAuth()) y hacer una
-      // navegación dura para que proxy.ts vea la cookie ya puesta.
       const idToken = await cred.user.getIdToken();
-      setTokenCookie(idToken);
+      const sessionResponse = await fetch("/api/auth/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idToken }),
+      });
+      if (!sessionResponse.ok) {
+        throw new Error("No se pudo iniciar la sesión");
+      }
+      await signOut(auth);
 
       // Correo con nuestra propia plantilla (lib/mailer.ts), no el de
       // Firebase — la cuenta ya quedó creada, así que un fallo acá no debe
@@ -66,7 +71,6 @@ export default function RegisterPage() {
       try {
         await fetch("/api/partner/send-verification-email", {
           method: "POST",
-          headers: { Authorization: `Bearer ${idToken}` },
         });
       } catch (mailError) {
         console.error("No se pudo enviar el correo de verificación:", mailError);
@@ -74,6 +78,7 @@ export default function RegisterPage() {
 
       window.location.href = "/verify-email";
     } catch {
+      await signOut(auth).catch(() => undefined);
       setError("Ocurrió un error inesperado. Intenta de nuevo.");
     } finally {
       setLoading(false);
